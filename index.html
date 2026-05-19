@@ -348,10 +348,13 @@ function card(it){
 
   if(it.status==='판매완료'&&sold>0){
     var profit=(it.sell_price||0)*sold-(it.buy_price||0)*sold-(it.fee||0);
+    var cost=(it.buy_price||0)*sold;
+    var marginRate=cost>0?Math.round(profit/cost*100):0;
     metaItems+='<div><div class="ml">판매가 (개당)</div><div class="mv">'+(it.sell_price||0).toLocaleString()+'원</div></div>'+
       '<div><div class="ml">판매일</div><div class="mv">'+(it.sell_date||'-')+'</div></div>'+
       '<div><div class="ml">플랫폼</div><div class="mv">'+(it.platform||'-')+'</div></div>'+
-      '<div><div class="ml">순수익</div><div class="mv '+(profit>=0?'g':'r')+'">'+(profit>=0?'+':'')+profit.toLocaleString()+'원</div></div>';
+      '<div><div class="ml">순수익</div><div class="mv '+(profit>=0?'g':'r')+'">'+(profit>=0?'+':'')+profit.toLocaleString()+'원</div></div>'+
+      '<div><div class="ml">마진율</div><div class="mv '+(marginRate>=0?'g':'r')+'">'+(marginRate>=0?'+':'')+marginRate+'%</div></div>';
   }else if(it.status==='등록중'||it.status==='발송완료'){
     metaItems+='<div><div class="ml">등록 플랫폼</div><div class="mv">'+(it.platform||'-')+'</div></div>';
   }
@@ -380,11 +383,12 @@ function card(it){
           '<button class="btnD" onclick="del(\''+it.id+'\')">삭제</button>';
     inlineForm+='<div class="inf'+(oid===fkey?' on':'')+'" id="'+fkey+'">'+
       '<div class="ig">'+
-      '<div><div class="il">판매 수량 (최대 '+remain+'개)</div><input type="number" id="sq'+it.id+'" value="'+remain+'" min="1" max="'+remain+'"></div>'+
-      '<div><div class="il">판매가 (원, 개당)</div><input type="number" id="sp'+it.id+'" placeholder="200000"></div>'+
-      '<div><div class="il">수수료 (원, 합계)</div><input type="number" id="fe'+it.id+'" placeholder="10000"></div>'+
+      '<div><div class="il">판매 수량 (최대 '+remain+'개)</div><input type="number" id="sq'+it.id+'" value="'+remain+'" min="1" max="'+remain+'" oninput="calcSell(\''+it.id+'\','+it.buy_price+')"></div>'+
+      '<div><div class="il">판매가 (원, 개당)</div><input type="number" id="sp'+it.id+'" placeholder="200000" oninput="calcSell(\''+it.id+'\','+it.buy_price+')"></div>'+
+      '<div><div class="il">수수료 (원, 합계)</div><input type="number" id="fe'+it.id+'" placeholder="10000" oninput="calcSell(\''+it.id+'\','+it.buy_price+')"></div>'+
       '<div><div class="il">판매일</div><input type="date" id="sd'+it.id+'" value="'+new Date().toISOString().split('T')[0]+'"></div>'+
       '</div>'+
+      '<div id="calc'+it.id+'" style="display:none;gap:20px;align-items:center;background:#f8f9fa;border-radius:8px;padding:12px 16px;margin-bottom:12px;"></div>'+
       '<button class="btnP" onclick="confSell(\''+it.id+'\','+remain+')">판매 확정</button></div>';
   }else{
     acts+='<button class="btnD" onclick="del(\''+it.id+'\')">삭제</button>';
@@ -410,6 +414,27 @@ function card(it){
 }
 
 function tog(key){oid=oid===key?null:key;render();}
+
+function calcSell(id,buyPrice){
+  var qty=parseInt(document.getElementById('sq'+id).value)||1;
+  var sp=parseInt(document.getElementById('sp'+id).value)||0;
+  var fee=parseInt(document.getElementById('fe'+id).value)||0;
+  var el=document.getElementById('calc'+id);
+  if(!el)return;
+  if(!sp){el.style.display='none';return;}
+  var settle=sp*qty-fee;
+  var cost=buyPrice*qty;
+  var margin=settle-cost;
+  var rate=cost>0?Math.round(margin/cost*100):0;
+  var gc=margin>=0?'#16a34a':'#dc2626';
+  el.style.display='flex';
+  el.innerHTML=
+    '<div><div style="font-size:11px;color:#888;margin-bottom:3px;">정산금액</div><div style="font-size:14px;font-weight:700;">'+settle.toLocaleString()+'원</div></div>'+
+    '<div style="width:1px;background:#e2e0da;"></div>'+
+    '<div><div style="font-size:11px;color:#888;margin-bottom:3px;">마진</div><div style="font-size:14px;font-weight:700;color:'+gc+';">'+(margin>=0?'+':'')+margin.toLocaleString()+'원</div></div>'+
+    '<div style="width:1px;background:#e2e0da;"></div>'+
+    '<div><div style="font-size:11px;color:#888;margin-bottom:3px;">마진율</div><div style="font-size:14px;font-weight:700;color:'+gc+';">'+(rate>=0?'+':'')+rate+'%</div></div>';
+}
 
 async function addItem(){
   var name=document.getElementById('fn').value.trim();
