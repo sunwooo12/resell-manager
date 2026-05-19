@@ -47,7 +47,10 @@
     position: sticky;
     top: 0;
     z-index: 100;
+    pointer-events: all;
   }
+
+  nav button { pointer-events: all; cursor: pointer; }
 
   .logo { font-size: 17px; font-weight: 700; letter-spacing: -0.5px; }
   .logo span { color: var(--text-muted); font-weight: 400; }
@@ -641,7 +644,7 @@ document.getElementById('f-date').value = new Date().toISOString().split('T')[0]
 if (initSupabase()) {
   loadItems();
 } else {
-  document.getElementById('itemList').innerHTML = '<div class="empty">👆 설정 탭에서 Supabase 키를 먼저 입력해주세요.</div>';
+  showSection('config');
 }
 </script>
 </body>
