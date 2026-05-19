@@ -1,651 +1,294 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>리셀 재고관리</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap');
-
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-
-  :root {
-    --bg: #f5f4f0;
-    --surface: #ffffff;
-    --border: #e2e0da;
-    --text: #1a1a1a;
-    --text-muted: #888;
-    --accent: #1a1a1a;
-    --green: #16a34a;
-    --green-bg: #dcfce7;
-    --red: #dc2626;
-    --red-bg: #fee2e2;
-    --blue: #2563eb;
-    --blue-bg: #dbeafe;
-    --yellow-bg: #fef9c3;
-    --yellow: #854d0e;
-    --radius: 12px;
-    --radius-sm: 8px;
-  }
-
-  body {
-    font-family: 'Noto Sans KR', sans-serif;
-    background: var(--bg);
-    color: var(--text);
-    min-height: 100vh;
-  }
-
-  header {
-    background: var(--surface);
-    border-bottom: 1px solid var(--border);
-    padding: 0 24px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    height: 60px;
-    position: sticky;
-    top: 0;
-    z-index: 100;
-    pointer-events: all;
-  }
-
-  nav button { pointer-events: all; cursor: pointer; }
-
-  .logo { font-size: 17px; font-weight: 700; letter-spacing: -0.5px; }
-  .logo span { color: var(--text-muted); font-weight: 400; }
-
-  nav { display: flex; gap: 4px; }
-  .nav-btn {
-    padding: 7px 16px;
-    border-radius: var(--radius-sm);
-    border: none;
-    background: none;
-    font-size: 14px;
-    font-family: 'Noto Sans KR', sans-serif;
-    cursor: pointer;
-    color: var(--text-muted);
-    font-weight: 500;
-    transition: all 0.15s;
-  }
-  .nav-btn.active { background: var(--accent); color: #fff; }
-  .nav-btn:hover:not(.active) { background: var(--bg); color: var(--text); }
-
-  main { max-width: 900px; margin: 0 auto; padding: 28px 20px; }
-
-  .section { display: none; }
-  .section.active { display: block; }
-
-  /* 통계 카드 */
-  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 24px; }
-  .stat {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 18px 20px;
-  }
-  .stat-label { font-size: 12px; color: var(--text-muted); margin-bottom: 6px; }
-  .stat-value { font-size: 24px; font-weight: 700; letter-spacing: -1px; }
-  .stat-value.green { color: var(--green); }
-  .stat-value.red { color: var(--red); }
-
-  /* 필터 */
-  .toolbar {
-    display: flex;
-    gap: 8px;
-    margin-bottom: 16px;
-    flex-wrap: wrap;
-    align-items: center;
-  }
-  .filter-btn {
-    padding: 6px 14px;
-    border-radius: 999px;
-    border: 1px solid var(--border);
-    background: var(--surface);
-    font-size: 13px;
-    font-family: 'Noto Sans KR', sans-serif;
-    cursor: pointer;
-    color: var(--text-muted);
-    transition: all 0.15s;
-  }
-  .filter-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
-
-  .add-btn {
-    margin-left: auto;
-    padding: 8px 18px;
-    border-radius: var(--radius-sm);
-    border: none;
-    background: var(--accent);
-    color: #fff;
-    font-size: 14px;
-    font-family: 'Noto Sans KR', sans-serif;
-    font-weight: 500;
-    cursor: pointer;
-    transition: opacity 0.15s;
-  }
-  .add-btn:hover { opacity: 0.85; }
-
-  /* 아이템 카드 */
-  .item-list { display: flex; flex-direction: column; gap: 10px; }
-  .item-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 18px 20px;
-    transition: box-shadow 0.15s;
-  }
-  .item-card:hover { box-shadow: 0 2px 12px rgba(0,0,0,0.07); }
-
-  .item-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
-  .item-name { font-size: 15px; font-weight: 700; margin-bottom: 3px; }
-  .item-sub { font-size: 12px; color: var(--text-muted); }
-
-  .badge {
-    font-size: 11px;
-    font-weight: 700;
-    padding: 3px 10px;
-    border-radius: 999px;
-    white-space: nowrap;
-  }
-  .badge-보유중 { background: var(--yellow-bg); color: var(--yellow); }
-  .badge-등록중 { background: var(--blue-bg); color: var(--blue); }
-  .badge-판매완료 { background: var(--green-bg); color: var(--green); }
-
-  .item-meta { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 14px; }
-  .meta { display: flex; flex-direction: column; gap: 2px; }
-  .meta-label { font-size: 11px; color: var(--text-muted); }
-  .meta-value { font-size: 13px; font-weight: 500; }
-  .meta-value.green { color: var(--green); }
-  .meta-value.red { color: var(--red); }
-
-  .item-actions { display: flex; gap: 8px; border-top: 1px solid var(--border); padding-top: 12px; }
-  .action-btn {
-    padding: 6px 14px;
-    border-radius: var(--radius-sm);
-    border: 1px solid var(--border);
-    background: none;
-    font-size: 13px;
-    font-family: 'Noto Sans KR', sans-serif;
-    cursor: pointer;
-    color: var(--text);
-    transition: all 0.15s;
-  }
-  .action-btn:hover { background: var(--bg); }
-  .action-btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
-  .action-btn.primary:hover { opacity: 0.85; background: var(--accent); }
-  .action-btn.danger { color: var(--red); border-color: #fca5a5; }
-  .action-btn.danger:hover { background: var(--red-bg); }
-
-  /* 폼 */
-  .form-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 28px;
-    max-width: 600px;
-  }
-  .form-title { font-size: 18px; font-weight: 700; margin-bottom: 24px; }
-  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
-  .form-group { display: flex; flex-direction: column; gap: 6px; }
-  .form-group.full { grid-column: 1 / -1; }
-  .form-group label { font-size: 13px; color: var(--text-muted); font-weight: 500; }
-  .form-group input, .form-group select {
-    padding: 9px 12px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    font-size: 14px;
-    font-family: 'Noto Sans KR', sans-serif;
-    color: var(--text);
-    background: var(--surface);
-    transition: border-color 0.15s;
-  }
-  .form-group input:focus, .form-group select:focus {
-    outline: none;
-    border-color: var(--accent);
-  }
-  .form-actions { display: flex; gap: 10px; }
-  .submit-btn {
-    padding: 10px 24px;
-    border-radius: var(--radius-sm);
-    border: none;
-    background: var(--accent);
-    color: #fff;
-    font-size: 14px;
-    font-family: 'Noto Sans KR', sans-serif;
-    font-weight: 700;
-    cursor: pointer;
-    transition: opacity 0.15s;
-  }
-  .submit-btn:hover { opacity: 0.85; }
-  .cancel-btn {
-    padding: 10px 24px;
-    border-radius: var(--radius-sm);
-    border: 1px solid var(--border);
-    background: none;
-    font-size: 14px;
-    font-family: 'Noto Sans KR', sans-serif;
-    cursor: pointer;
-    color: var(--text-muted);
-  }
-
-  /* 인라인 폼 */
-  .inline-form {
-    background: var(--bg);
-    border-radius: var(--radius-sm);
-    padding: 14px;
-    margin-top: 12px;
-    display: none;
-  }
-  .inline-form.open { display: block; }
-  .inline-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 12px; }
-  .inline-form input, .inline-form select {
-    padding: 7px 10px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    font-size: 13px;
-    font-family: 'Noto Sans KR', sans-serif;
-    background: var(--surface);
-    width: 100%;
-  }
-  .inline-label { font-size: 11px; color: var(--text-muted); margin-bottom: 4px; }
-
-  .empty { text-align: center; padding: 60px 20px; color: var(--text-muted); font-size: 14px; }
-
-  /* 로딩 */
-  .loading { text-align: center; padding: 40px; color: var(--text-muted); font-size: 14px; }
-
-  /* 설정 */
-  .config-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 28px;
-    max-width: 600px;
-  }
-  .config-card h2 { font-size: 18px; font-weight: 700; margin-bottom: 8px; }
-  .config-desc { font-size: 13px; color: var(--text-muted); margin-bottom: 24px; line-height: 1.6; }
-  .config-card input {
-    width: 100%;
-    padding: 10px 12px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    font-size: 13px;
-    font-family: 'Noto Sans KR', sans-serif;
-    margin-bottom: 12px;
-    background: var(--surface);
-  }
-  .config-card input:focus { outline: none; border-color: var(--accent); }
-  .alert { padding: 12px 16px; border-radius: var(--radius-sm); font-size: 13px; margin-bottom: 16px; }
-  .alert-success { background: var(--green-bg); color: var(--green); }
-  .alert-error { background: var(--red-bg); color: var(--red); }
-
-  @media (max-width: 600px) {
-    .stats { grid-template-columns: 1fr 1fr; }
-    .item-meta { grid-template-columns: repeat(2, 1fr); }
-    .form-grid { grid-template-columns: 1fr; }
-    .inline-grid { grid-template-columns: 1fr; }
-    nav { gap: 2px; }
-    .nav-btn { padding: 7px 10px; font-size: 13px; }
-  }
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap');
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Noto Sans KR',sans-serif;background:#f5f4f0;color:#1a1a1a;min-height:100vh;}
+header{background:#fff;border-bottom:1px solid #e2e0da;padding:0 24px;display:flex;align-items:center;justify-content:space-between;height:60px;}
+.logo{font-size:17px;font-weight:700;}
+.logo span{color:#888;font-weight:400;}
+nav{display:flex;gap:4px;}
+button.nb{padding:7px 16px;border-radius:8px;border:none;background:none;font-size:14px;font-family:'Noto Sans KR',sans-serif;cursor:pointer;color:#888;font-weight:500;}
+button.nb.on{background:#1a1a1a;color:#fff;}
+main{max-width:900px;margin:0 auto;padding:28px 20px;}
+.sec{display:none;}
+.sec.on{display:block;}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:24px;}
+.stat{background:#fff;border:1px solid #e2e0da;border-radius:12px;padding:18px 20px;}
+.sl{font-size:12px;color:#888;margin-bottom:6px;}
+.sv{font-size:24px;font-weight:700;}
+.sv.g{color:#16a34a;}
+.sv.r{color:#dc2626;}
+.toolbar{display:flex;gap:8px;margin-bottom:16px;align-items:center;flex-wrap:wrap;}
+button.fb{padding:6px 14px;border-radius:999px;border:1px solid #e2e0da;background:#fff;font-size:13px;font-family:'Noto Sans KR',sans-serif;cursor:pointer;color:#888;}
+button.fb.on{background:#1a1a1a;color:#fff;border-color:#1a1a1a;}
+button.ab{margin-left:auto;padding:8px 18px;border-radius:8px;border:none;background:#1a1a1a;color:#fff;font-size:14px;font-family:'Noto Sans KR',sans-serif;font-weight:500;cursor:pointer;}
+.list{display:flex;flex-direction:column;gap:10px;}
+.card{background:#fff;border:1px solid #e2e0da;border-radius:12px;padding:18px 20px;}
+.ctop{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;}
+.cn{font-size:15px;font-weight:700;margin-bottom:3px;}
+.cs{font-size:12px;color:#888;}
+.badge{font-size:11px;font-weight:700;padding:3px 10px;border-radius:999px;}
+.bY{background:#fef9c3;color:#854d0e;}
+.bB{background:#dbeafe;color:#2563eb;}
+.bG{background:#dcfce7;color:#16a34a;}
+.meta{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px;}
+.ml{font-size:11px;color:#888;}
+.mv{font-size:13px;font-weight:500;}
+.mv.g{color:#16a34a;}
+.mv.r{color:#dc2626;}
+.acts{display:flex;gap:8px;border-top:1px solid #e2e0da;padding-top:12px;}
+button.btn{padding:6px 14px;border-radius:8px;border:1px solid #e2e0da;background:none;font-size:13px;font-family:'Noto Sans KR',sans-serif;cursor:pointer;color:#1a1a1a;}
+button.btnP{padding:6px 14px;border-radius:8px;border:none;background:#1a1a1a;color:#fff;font-size:13px;font-family:'Noto Sans KR',sans-serif;cursor:pointer;}
+button.btnD{padding:6px 14px;border-radius:8px;border:1px solid #fca5a5;background:none;font-size:13px;font-family:'Noto Sans KR',sans-serif;cursor:pointer;color:#dc2626;}
+.inf{background:#f5f4f0;border-radius:8px;padding:14px;margin-top:12px;display:none;}
+.inf.on{display:block;}
+.ig{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px;}
+.ig input,.ig select,.inf select{padding:7px 10px;border:1px solid #e2e0da;border-radius:8px;font-size:13px;font-family:'Noto Sans KR',sans-serif;background:#fff;width:100%;}
+.il{font-size:11px;color:#888;margin-bottom:4px;}
+.empty{text-align:center;padding:60px 20px;color:#888;font-size:14px;}
+.loading{text-align:center;padding:40px;color:#888;font-size:14px;}
+.fc{background:#fff;border:1px solid #e2e0da;border-radius:12px;padding:28px;max-width:600px;}
+.ft{font-size:18px;font-weight:700;margin-bottom:24px;}
+.fg{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;}
+.fg label{font-size:13px;color:#888;font-weight:500;display:block;margin-bottom:6px;}
+.fg input,.fg select{padding:9px 12px;border:1px solid #e2e0da;border-radius:8px;font-size:14px;font-family:'Noto Sans KR',sans-serif;color:#1a1a1a;background:#fff;width:100%;}
+.full{grid-column:1/-1;}
+.fa{display:flex;gap:10px;}
+button.sb{padding:10px 24px;border-radius:8px;border:none;background:#1a1a1a;color:#fff;font-size:14px;font-family:'Noto Sans KR',sans-serif;font-weight:700;cursor:pointer;}
+button.cb{padding:10px 24px;border-radius:8px;border:1px solid #e2e0da;background:none;font-size:14px;font-family:'Noto Sans KR',sans-serif;cursor:pointer;color:#888;}
+.cfg{background:#fff;border:1px solid #e2e0da;border-radius:12px;padding:28px;max-width:600px;}
+.cfg h2{font-size:18px;font-weight:700;margin-bottom:8px;}
+.cfg p{font-size:13px;color:#888;margin-bottom:24px;line-height:1.6;}
+.cfg label{font-size:13px;color:#888;display:block;margin-bottom:6px;}
+.cfg input{width:100%;padding:10px 12px;border:1px solid #e2e0da;border-radius:8px;font-size:13px;font-family:'Noto Sans KR',sans-serif;margin-bottom:16px;background:#fff;display:block;}
+.al{padding:12px 16px;border-radius:8px;font-size:13px;margin-bottom:16px;}
+.alOk{background:#dcfce7;color:#16a34a;}
+.alErr{background:#fee2e2;color:#dc2626;}
 </style>
 </head>
 <body>
-
 <header>
   <div class="logo">리셀 재고관리 <span>by 선우</span></div>
   <nav>
-    <button class="nav-btn active" onclick="showSection('inventory')">재고 현황</button>
-    <button class="nav-btn" onclick="showSection('add')">매입 등록</button>
-    <button class="nav-btn" onclick="showSection('stats')">수익 통계</button>
-    <button class="nav-btn" onclick="showSection('config')">설정</button>
+    <button class="nb" id="t0" onclick="go(0)">재고 현황</button>
+    <button class="nb" id="t1" onclick="go(1)">매입 등록</button>
+    <button class="nb" id="t2" onclick="go(2)">수익 통계</button>
+    <button class="nb" id="t3" onclick="go(3)">설정</button>
   </nav>
 </header>
-
 <main>
-
-  <!-- 재고 현황 -->
-  <div id="inventory" class="section active">
+  <div class="sec" id="s0">
     <div class="stats">
-      <div class="stat">
-        <div class="stat-label">전체 재고</div>
-        <div class="stat-value" id="s-total">-</div>
-      </div>
-      <div class="stat">
-        <div class="stat-label">보유 / 등록중</div>
-        <div class="stat-value" id="s-active">-</div>
-      </div>
-      <div class="stat">
-        <div class="stat-label">이번달 수익</div>
-        <div class="stat-value" id="s-profit">-</div>
-      </div>
+      <div class="stat"><div class="sl">전체 재고</div><div class="sv" id="h0">-</div></div>
+      <div class="stat"><div class="sl">보유 / 등록중</div><div class="sv" id="h1">-</div></div>
+      <div class="stat"><div class="sl">이번달 수익</div><div class="sv" id="h2">-</div></div>
     </div>
     <div class="toolbar">
-      <button class="filter-btn active" onclick="setFilter('all', this)">전체</button>
-      <button class="filter-btn" onclick="setFilter('보유중', this)">보유중</button>
-      <button class="filter-btn" onclick="setFilter('등록중', this)">등록중</button>
-      <button class="filter-btn" onclick="setFilter('판매완료', this)">판매완료</button>
-      <button class="add-btn" onclick="showSection('add')">+ 매입 등록</button>
+      <button class="fb on" onclick="filt('all',this)">전체</button>
+      <button class="fb" onclick="filt('보유중',this)">보유중</button>
+      <button class="fb" onclick="filt('등록중',this)">등록중</button>
+      <button class="fb" onclick="filt('판매완료',this)">판매완료</button>
+      <button class="ab" onclick="go(1)">+ 매입 등록</button>
     </div>
-    <div id="itemList" class="item-list"><div class="loading">불러오는 중...</div></div>
+    <div id="itemList" class="list"><div class="loading">불러오는 중...</div></div>
   </div>
 
-  <!-- 매입 등록 -->
-  <div id="add" class="section">
-    <div class="form-card">
-      <div class="form-title">매입 등록</div>
-      <div class="form-grid">
-        <div class="form-group full">
-          <label>상품명 *</label>
-          <input type="text" id="f-name" placeholder="예: 나이키 에어포스1 화이트" />
-        </div>
-        <div class="form-group">
-          <label>사이즈</label>
-          <input type="text" id="f-size" placeholder="270" />
-        </div>
-        <div class="form-group">
-          <label>매입처 *</label>
-          <select id="f-source">
-            <option>SSG</option>
-            <option>무신사</option>
-            <option>올리브영</option>
-            <option>네이버</option>
-            <option>오프라인</option>
-            <option>기타</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>매입가 (원) *</label>
-          <input type="number" id="f-price" placeholder="150000" />
-        </div>
-        <div class="form-group">
-          <label>매입일 *</label>
-          <input type="date" id="f-date" />
-        </div>
-        <div class="form-group full">
-          <label>메모</label>
-          <input type="text" id="f-note" placeholder="보관 위치, 특이사항 등" />
-        </div>
+  <div class="sec" id="s1">
+    <div class="fc">
+      <div class="ft">매입 등록</div>
+      <div class="fg">
+        <div class="full"><label>상품명 *</label><input type="text" id="fn" placeholder="나이키 에어포스1 화이트"/></div>
+        <div><label>사이즈</label><input type="text" id="fz" placeholder="270"/></div>
+        <div><label>매입처</label><select id="fs"><option>SSG</option><option>무신사</option><option>올리브영</option><option>네이버</option><option>오프라인</option><option>기타</option></select></div>
+        <div><label>매입가 (원) *</label><input type="number" id="fp" placeholder="150000"/></div>
+        <div><label>매입일 *</label><input type="date" id="fd"/></div>
+        <div class="full"><label>메모</label><input type="text" id="fm" placeholder="보관 위치 등"/></div>
       </div>
-      <div class="form-actions">
-        <button class="submit-btn" onclick="addItem()">등록하기</button>
-        <button class="cancel-btn" onclick="showSection('inventory')">취소</button>
+      <div class="fa">
+        <button class="sb" onclick="addItem()">등록하기</button>
+        <button class="cb" onclick="go(0)">취소</button>
       </div>
     </div>
   </div>
 
-  <!-- 수익 통계 -->
-  <div id="stats" class="section">
-    <div class="stats" style="margin-bottom:16px;">
-      <div class="stat">
-        <div class="stat-label">총 매입 비용</div>
-        <div class="stat-value" id="st-buy">-</div>
-      </div>
-      <div class="stat">
-        <div class="stat-label">총 판매 수익</div>
-        <div class="stat-value" id="st-sell">-</div>
-      </div>
-      <div class="stat">
-        <div class="stat-label">총 순수익</div>
-        <div class="stat-value" id="st-profit">-</div>
-      </div>
+  <div class="sec" id="s2">
+    <div class="stats">
+      <div class="stat"><div class="sl">총 매입 비용</div><div class="sv" id="p0">-</div></div>
+      <div class="stat"><div class="sl">총 판매 수익</div><div class="sv" id="p1">-</div></div>
+      <div class="stat"><div class="sl">총 순수익</div><div class="sv" id="p2">-</div></div>
     </div>
     <div class="stats">
-      <div class="stat">
-        <div class="stat-label">보유중</div>
-        <div class="stat-value" id="st-hold">-</div>
-      </div>
-      <div class="stat">
-        <div class="stat-label">등록중</div>
-        <div class="stat-value" id="st-listed">-</div>
-      </div>
-      <div class="stat">
-        <div class="stat-label">판매완료</div>
-        <div class="stat-value green" id="st-sold">-</div>
-      </div>
+      <div class="stat"><div class="sl">보유중</div><div class="sv" id="p3">-</div></div>
+      <div class="stat"><div class="sl">등록중</div><div class="sv" id="p4">-</div></div>
+      <div class="stat"><div class="sl">판매완료</div><div class="sv g" id="p5">-</div></div>
     </div>
   </div>
 
-  <!-- 설정 -->
-  <div id="config" class="section">
-    <div class="config-card">
+  <div class="sec" id="s3">
+    <div class="cfg">
       <h2>Supabase 연결 설정</h2>
-      <p class="config-desc">
-        Supabase에서 복사한 키를 입력하세요.<br>
-        한 번만 입력하면 이 기기에 저장돼요.
-      </p>
-      <div id="config-alert"></div>
-      <div class="form-group" style="margin-bottom:12px;">
-        <label style="font-size:13px;color:var(--text-muted);margin-bottom:6px;display:block;">Project URL</label>
-        <input type="text" id="cfg-url" placeholder="https://xxxx.supabase.co" />
-      </div>
-      <div class="form-group" style="margin-bottom:20px;">
-        <label style="font-size:13px;color:var(--text-muted);margin-bottom:6px;display:block;">Publishable Key (anon key)</label>
-        <input type="text" id="cfg-key" placeholder="sb_publishable_..." />
-      </div>
-      <button class="submit-btn" onclick="saveConfig()">저장 및 연결</button>
+      <p>Supabase에서 복사한 키를 입력하세요.<br>한 번만 입력하면 이 기기에 저장돼요.</p>
+      <div id="alert"></div>
+      <label>Project URL</label>
+      <input type="text" id="cu" placeholder="https://xxxx.supabase.co"/>
+      <label>Publishable Key</label>
+      <input type="text" id="ck" placeholder="sb_publishable_..."/>
+      <button class="sb" onclick="saveCfg()">저장 및 연결</button>
     </div>
   </div>
-
 </main>
-
 <script>
-const STORAGE_URL = 'resell_supabase_url';
-const STORAGE_KEY = 'resell_supabase_key';
+var sb=null,items=[],cf='all',oid=null;
+var tabs=['t0','t1','t2','t3'],secs=['s0','s1','s2','s3'];
 
-let supabase = null;
-let allItems = [];
-let currentFilter = 'all';
-let openFormId = null;
-
-function initSupabase() {
-  const url = localStorage.getItem(STORAGE_URL);
-  const key = localStorage.getItem(STORAGE_KEY);
-  if (url && key) {
-    supabase = window.supabase.createClient(url, key);
-    return true;
+function go(i){
+  tabs.forEach(function(t,j){
+    document.getElementById(t).className='nb'+(i===j?' on':'');
+    document.getElementById(secs[j]).className='sec'+(i===j?' on':'');
+  });
+  if(i===0)load();
+  if(i===2)loadStats();
+  if(i===3){
+    document.getElementById('cu').value=localStorage.getItem('rsu')||'';
+    document.getElementById('ck').value=localStorage.getItem('rsk')||'';
   }
+}
+
+function saveCfg(){
+  var u=document.getElementById('cu').value.trim();
+  var k=document.getElementById('ck').value.trim();
+  if(!u||!k){document.getElementById('alert').innerHTML='<div class="al alErr">URL과 Key를 모두 입력해주세요.</div>';return;}
+  localStorage.setItem('rsu',u);
+  localStorage.setItem('rsk',k);
+  sb=window.supabase.createClient(u,k);
+  document.getElementById('alert').innerHTML='<div class="al alOk">연결 성공! 재고 현황으로 이동합니다.</div>';
+  setTimeout(function(){go(0);},1200);
+}
+
+function init(){
+  var u=localStorage.getItem('rsu'),k=localStorage.getItem('rsk');
+  if(u&&k){sb=window.supabase.createClient(u,k);return true;}
   return false;
 }
 
-function saveConfig() {
-  const url = document.getElementById('cfg-url').value.trim();
-  const key = document.getElementById('cfg-key').value.trim();
-  if (!url || !key) { showAlert('config-alert', 'URL과 Key를 모두 입력해주세요.', 'error'); return; }
-  localStorage.setItem(STORAGE_URL, url);
-  localStorage.setItem(STORAGE_KEY, key);
-  supabase = window.supabase.createClient(url, key);
-  showAlert('config-alert', '연결 성공! 재고 현황으로 이동합니다.', 'success');
-  setTimeout(() => showSection('inventory'), 1200);
+function filt(f,btn){
+  cf=f;
+  document.querySelectorAll('.fb').forEach(function(b){b.classList.remove('on');});
+  btn.classList.add('on');
+  render();
 }
 
-function showAlert(id, msg, type) {
-  document.getElementById(id).innerHTML = `<div class="alert alert-${type}">${msg}</div>`;
+async function load(){
+  if(!sb){document.getElementById('itemList').innerHTML='<div class="empty">설정 탭에서 Supabase 키를 먼저 입력해주세요.</div>';return;}
+  document.getElementById('itemList').innerHTML='<div class="loading">불러오는 중...</div>';
+  var res=await sb.from('items').select('*').order('created_at',{ascending:false});
+  if(res.error){document.getElementById('itemList').innerHTML='<div class="empty">데이터를 불러오지 못했어요.</div>';return;}
+  items=res.data||[];
+  var total=items.length;
+  var active=items.filter(function(i){return i.status!=='판매완료';}).length;
+  var now=new Date();
+  var mm=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
+  var profit=items.filter(function(i){return i.status==='판매완료'&&i.sell_date&&i.sell_date.startsWith(mm);}).reduce(function(s,i){return s+i.sell_price-i.buy_price-(i.fee||0);},0);
+  document.getElementById('h0').textContent=total+'개';
+  document.getElementById('h1').textContent=active+'개';
+  var pe=document.getElementById('h2');
+  pe.textContent=(profit>=0?'+':'')+profit.toLocaleString()+'원';
+  pe.className='sv '+(profit>=0?'g':'r');
+  render();
 }
 
-function showSection(name) {
-  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
-  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-  document.getElementById(name).classList.add('active');
-  const idx = ['inventory','add','stats','config'].indexOf(name);
-  document.querySelectorAll('.nav-btn')[idx].classList.add('active');
-  if (name === 'inventory') loadItems();
-  if (name === 'stats') loadStats();
-  if (name === 'config') loadConfigValues();
+function render(){
+  var filtered=cf==='all'?items:items.filter(function(i){return i.status===cf;});
+  var el=document.getElementById('itemList');
+  if(!filtered.length){el.innerHTML='<div class="empty">해당하는 상품이 없어요</div>';return;}
+  el.innerHTML=filtered.map(function(it){return card(it);}).join('');
 }
 
-function loadConfigValues() {
-  document.getElementById('cfg-url').value = localStorage.getItem(STORAGE_URL) || '';
-  document.getElementById('cfg-key').value = localStorage.getItem(STORAGE_KEY) || '';
+function card(it){
+  var profit=it.status==='판매완료'?it.sell_price-it.buy_price-(it.fee||0):null;
+  var ph=profit!==null?'<div><div class="ml">순수익</div><div class="mv '+(profit>=0?'g':'r')+'">'+(profit>=0?'+':'')+profit.toLocaleString()+'원</div></div>':'';
+  var sm=it.status==='판매완료'?'<div><div class="ml">판매가</div><div class="mv">'+it.sell_price.toLocaleString()+'원</div></div><div><div class="ml">판매일</div><div class="mv">'+(it.sell_date||'-')+'</div></div><div><div class="ml">플랫폼</div><div class="mv">'+(it.platform||'-')+'</div></div>'+ph:'';
+  var lm=it.status==='등록중'?'<div><div class="ml">등록 플랫폼</div><div class="mv">'+(it.platform||'-')+'</div></div>':'';
+  var acts='';
+  if(it.status==='보유중') acts='<button class="btn" onclick="tog(\'lf'+it.id+'\')">플랫폼 등록</button><button class="btnD" onclick="del(\''+it.id+'\')">삭제</button>';
+  else if(it.status==='등록중') acts='<button class="btnP" onclick="tog(\'sf'+it.id+'\')">판매 완료</button><button class="btnD" onclick="del(\''+it.id+'\')">삭제</button>';
+  var lf=it.status==='보유중'?'<div class="inf'+(oid==='lf'+it.id?' on':'')+'" id="lf'+it.id+'"><div class="il">등록 플랫폼</div><select id="lp'+it.id+'" style="width:200px;padding:7px 10px;border:1px solid #e2e0da;border-radius:8px;font-size:13px;margin-bottom:10px;"><option>크림</option><option>포이즌</option><option>기타</option></select><br><button class="btnP" onclick="confList(\''+it.id+'\')">등록 확정</button></div>':'';
+  var sf=it.status==='등록중'?'<div class="inf'+(oid==='sf'+it.id?' on':'')+'" id="sf'+it.id+'"><div class="ig"><div><div class="il">판매가 (원)</div><input type="number" id="sp'+it.id+'" placeholder="200000"></div><div><div class="il">수수료 (원)</div><input type="number" id="fe'+it.id+'" placeholder="10000"></div><div><div class="il">판매일</div><input type="date" id="sd'+it.id+'" value="'+new Date().toISOString().split('T')[0]+'"></div></div><button class="btnP" onclick="confSell(\''+it.id+'\')">판매 확정</button></div>':'';
+  var bc=it.status==='보유중'?'bY':it.status==='등록중'?'bB':'bG';
+  return '<div class="card"><div class="ctop"><div><div class="cn">'+it.name+(it.size?' '+it.size:'')+'</div><div class="cs">'+it.source+' · 매입 '+it.buy_date+'</div></div><span class="badge '+bc+'">'+it.status+'</span></div><div class="meta"><div><div class="ml">매입가</div><div class="mv">'+it.buy_price.toLocaleString()+'원</div></div>'+sm+lm+(it.note?'<div style="grid-column:1/-1"><div class="ml">메모</div><div class="mv" style="font-size:12px;">'+it.note+'</div></div>':'')+'</div>'+(acts?'<div class="acts">'+acts+'</div>':'')+lf+sf+'</div>';
 }
 
-function setFilter(f, btn) {
-  currentFilter = f;
-  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  renderList();
-}
+function tog(key){oid=oid===key?null:key;render();}
 
-async function loadItems() {
-  if (!supabase) { document.getElementById('itemList').innerHTML = '<div class="empty">설정 탭에서 Supabase 키를 먼저 입력해주세요.</div>'; return; }
-  document.getElementById('itemList').innerHTML = '<div class="loading">불러오는 중...</div>';
-  const { data, error } = await supabase.from('items').select('*').order('created_at', { ascending: false });
-  if (error) { document.getElementById('itemList').innerHTML = '<div class="empty">데이터를 불러오지 못했어요. 설정을 확인해주세요.</div>'; return; }
-  allItems = data || [];
-  updateHeaderStats();
-  renderList();
-}
-
-function updateHeaderStats() {
-  const total = allItems.length;
-  const active = allItems.filter(i => i.status !== '판매완료').length;
-  const now = new Date();
-  const thisMonth = allItems.filter(i => i.status === '판매완료' && i.sell_date && i.sell_date.startsWith(`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`));
-  const profit = thisMonth.reduce((s, i) => s + (i.sell_price - i.buy_price - (i.fee||0)), 0);
-  document.getElementById('s-total').textContent = total + '개';
-  document.getElementById('s-active').textContent = active + '개';
-  const pel = document.getElementById('s-profit');
-  pel.textContent = (profit >= 0 ? '+' : '') + profit.toLocaleString() + '원';
-  pel.className = 'stat-value ' + (profit >= 0 ? 'green' : 'red');
-}
-
-function renderList() {
-  const filtered = currentFilter === 'all' ? allItems : allItems.filter(i => i.status === currentFilter);
-  const el = document.getElementById('itemList');
-  if (!filtered.length) { el.innerHTML = '<div class="empty">해당하는 상품이 없어요</div>'; return; }
-  el.innerHTML = filtered.map(item => itemCard(item)).join('');
-}
-
-function itemCard(it) {
-  const profit = it.status === '판매완료' ? it.sell_price - it.buy_price - (it.fee||0) : null;
-  const profitHtml = profit !== null ? `<div class="meta"><div class="meta-label">순수익</div><div class="meta-value ${profit>=0?'green':'red'}">${profit>=0?'+':''}${profit.toLocaleString()}원</div></div>` : '';
-  const soldMeta = it.status === '판매완료' ? `
-    <div class="meta"><div class="meta-label">판매가</div><div class="meta-value">${it.sell_price.toLocaleString()}원</div></div>
-    <div class="meta"><div class="meta-label">판매일</div><div class="meta-value">${it.sell_date||'-'}</div></div>
-    <div class="meta"><div class="meta-label">플랫폼</div><div class="meta-value">${it.platform||'-'}</div></div>
-    ${profitHtml}` : '';
-  const listedMeta = it.status === '등록중' ? `<div class="meta"><div class="meta-label">등록 플랫폼</div><div class="meta-value">${it.platform||'-'}</div></div>` : '';
-
-  let actions = '';
-  if (it.status === '보유중') {
-    actions = `<button class="action-btn" onclick="toggleForm('list-${it.id}')">플랫폼 등록</button>
-               <button class="action-btn danger" onclick="deleteItem('${it.id}')">삭제</button>`;
-  } else if (it.status === '등록중') {
-    actions = `<button class="action-btn primary" onclick="toggleForm('sell-${it.id}')">판매 완료</button>
-               <button class="action-btn danger" onclick="deleteItem('${it.id}')">삭제</button>`;
-  }
-
-  const listForm = it.status === '보유중' ? `
-    <div class="inline-form ${openFormId === 'list-'+it.id ? 'open' : ''}" id="form-list-${it.id}">
-      <div class="inline-label">등록 플랫폼</div>
-      <select id="lp-${it.id}" style="margin-bottom:10px;">
-        <option>크림</option><option>포이즌</option><option>기타</option>
-      </select>
-      <div><button class="action-btn primary" onclick="confirmList('${it.id}')">등록 확정</button></div>
-    </div>` : '';
-
-  const sellForm = it.status === '등록중' ? `
-    <div class="inline-form ${openFormId === 'sell-'+it.id ? 'open' : ''}" id="form-sell-${it.id}">
-      <div class="inline-grid">
-        <div><div class="inline-label">판매가 (원)</div><input type="number" id="sp-${it.id}" placeholder="200000" /></div>
-        <div><div class="inline-label">수수료 (원)</div><input type="number" id="fee-${it.id}" placeholder="10000" /></div>
-        <div><div class="inline-label">판매일</div><input type="date" id="sd-${it.id}" value="${new Date().toISOString().split('T')[0]}" /></div>
-      </div>
-      <button class="action-btn primary" onclick="confirmSell('${it.id}')">판매 확정</button>
-    </div>` : '';
-
-  return `<div class="item-card">
-    <div class="item-top">
-      <div>
-        <div class="item-name">${it.name}${it.size ? ' ' + it.size : ''}</div>
-        <div class="item-sub">${it.source} · 매입 ${it.buy_date}</div>
-      </div>
-      <span class="badge badge-${it.status}">${it.status}</span>
-    </div>
-    <div class="item-meta">
-      <div class="meta"><div class="meta-label">매입가</div><div class="meta-value">${it.buy_price.toLocaleString()}원</div></div>
-      ${soldMeta}${listedMeta}
-      ${it.note ? `<div class="meta" style="grid-column:1/-1"><div class="meta-label">메모</div><div class="meta-value" style="font-size:12px;">${it.note}</div></div>` : ''}
-    </div>
-    ${actions ? `<div class="item-actions">${actions}</div>` : ''}
-    ${listForm}${sellForm}
-  </div>`;
-}
-
-function toggleForm(key) {
-  openFormId = openFormId === key ? null : key;
-  renderList();
-}
-
-async function addItem() {
-  const name = document.getElementById('f-name').value.trim();
-  const size = document.getElementById('f-size').value.trim();
-  const source = document.getElementById('f-source').value;
-  const price = parseInt(document.getElementById('f-price').value);
-  const date = document.getElementById('f-date').value;
-  const note = document.getElementById('f-note').value.trim();
-  if (!name || !price || !date) { alert('상품명, 매입가, 매입일은 필수예요!'); return; }
-  if (!supabase) { alert('설정 탭에서 Supabase 키를 먼저 입력해주세요.'); return; }
-  const { error } = await supabase.from('items').insert([{ name, size, source, buy_price: price, buy_date: date, note, status: '보유중' }]);
-  if (error) { alert('등록 실패: ' + error.message); return; }
-  document.getElementById('f-name').value = '';
-  document.getElementById('f-size').value = '';
-  document.getElementById('f-price').value = '';
-  document.getElementById('f-note').value = '';
+async function addItem(){
+  var name=document.getElementById('fn').value.trim();
+  var size=document.getElementById('fz').value.trim();
+  var source=document.getElementById('fs').value;
+  var price=parseInt(document.getElementById('fp').value);
+  var date=document.getElementById('fd').value;
+  var note=document.getElementById('fm').value.trim();
+  if(!name||!price||!date){alert('상품명, 매입가, 매입일은 필수예요!');return;}
+  if(!sb){alert('설정 탭에서 Supabase 키를 먼저 입력해주세요.');return;}
+  var res=await sb.from('items').insert([{name:name,size:size,source:source,buy_price:price,buy_date:date,note:note,status:'보유중'}]);
+  if(res.error){alert('등록 실패: '+res.error.message);return;}
+  document.getElementById('fn').value='';
+  document.getElementById('fz').value='';
+  document.getElementById('fp').value='';
+  document.getElementById('fm').value='';
   alert('매입 등록 완료!');
-  showSection('inventory');
+  go(0);
 }
 
-async function confirmList(id) {
-  const platform = document.getElementById('lp-'+id).value;
-  const { error } = await supabase.from('items').update({ status: '등록중', platform }).eq('id', id);
-  if (error) { alert('오류: ' + error.message); return; }
-  openFormId = null;
-  loadItems();
+async function confList(id){
+  var platform=document.getElementById('lp'+id).value;
+  var res=await sb.from('items').update({status:'등록중',platform:platform}).eq('id',id);
+  if(res.error){alert('오류: '+res.error.message);return;}
+  oid=null;load();
 }
 
-async function confirmSell(id) {
-  const sp = parseInt(document.getElementById('sp-'+id).value);
-  const fee = parseInt(document.getElementById('fee-'+id).value) || 0;
-  const sd = document.getElementById('sd-'+id).value;
-  if (!sp || !sd) { alert('판매가와 판매일을 입력해주세요.'); return; }
-  const { error } = await supabase.from('items').update({ status: '판매완료', sell_price: sp, fee, sell_date: sd }).eq('id', id);
-  if (error) { alert('오류: ' + error.message); return; }
-  openFormId = null;
-  loadItems();
+async function confSell(id){
+  var sp=parseInt(document.getElementById('sp'+id).value);
+  var fee=parseInt(document.getElementById('fe'+id).value)||0;
+  var sd=document.getElementById('sd'+id).value;
+  if(!sp||!sd){alert('판매가와 판매일을 입력해주세요.');return;}
+  var res=await sb.from('items').update({status:'판매완료',sell_price:sp,fee:fee,sell_date:sd}).eq('id',id);
+  if(res.error){alert('오류: '+res.error.message);return;}
+  oid=null;load();
 }
 
-async function deleteItem(id) {
-  if (!confirm('정말 삭제하시겠어요?')) return;
-  const { error } = await supabase.from('items').delete().eq('id', id);
-  if (error) { alert('오류: ' + error.message); return; }
-  loadItems();
+async function del(id){
+  if(!confirm('정말 삭제하시겠어요?'))return;
+  var res=await sb.from('items').delete().eq('id',id);
+  if(res.error){alert('오류: '+res.error.message);return;}
+  load();
 }
 
-async function loadStats() {
-  if (!supabase) return;
-  const { data } = await supabase.from('items').select('*');
-  const items = data || [];
-  const totalBuy = items.reduce((s,i) => s + i.buy_price, 0);
-  const sold = items.filter(i => i.status === '판매완료');
-  const totalSell = sold.reduce((s,i) => s + (i.sell_price||0), 0);
-  const totalProfit = sold.reduce((s,i) => s + (i.sell_price - i.buy_price - (i.fee||0)), 0);
-  document.getElementById('st-buy').textContent = totalBuy.toLocaleString() + '원';
-  document.getElementById('st-sell').textContent = totalSell.toLocaleString() + '원';
-  const pel = document.getElementById('st-profit');
-  pel.textContent = (totalProfit>=0?'+':'') + totalProfit.toLocaleString() + '원';
-  pel.className = 'stat-value ' + (totalProfit>=0?'green':'red');
-  document.getElementById('st-hold').textContent = items.filter(i=>i.status==='보유중').length + '개';
-  document.getElementById('st-listed').textContent = items.filter(i=>i.status==='등록중').length + '개';
-  document.getElementById('st-sold').textContent = sold.length + '개';
+async function loadStats(){
+  if(!sb)return;
+  var res=await sb.from('items').select('*');
+  var its=res.data||[];
+  var tb=its.reduce(function(s,i){return s+i.buy_price;},0);
+  var sold=its.filter(function(i){return i.status==='판매완료';});
+  var ts=sold.reduce(function(s,i){return s+(i.sell_price||0);},0);
+  var tp=sold.reduce(function(s,i){return s+i.sell_price-i.buy_price-(i.fee||0);},0);
+  document.getElementById('p0').textContent=tb.toLocaleString()+'원';
+  document.getElementById('p1').textContent=ts.toLocaleString()+'원';
+  var pe=document.getElementById('p2');
+  pe.textContent=(tp>=0?'+':'')+tp.toLocaleString()+'원';
+  pe.className='sv '+(tp>=0?'g':'r');
+  document.getElementById('p3').textContent=its.filter(function(i){return i.status==='보유중';}).length+'개';
+  document.getElementById('p4').textContent=its.filter(function(i){return i.status==='등록중';}).length+'개';
+  document.getElementById('p5').textContent=sold.length+'개';
 }
 
-// 초기화
-document.getElementById('f-date').value = new Date().toISOString().split('T')[0];
-if (initSupabase()) {
-  loadItems();
-} else {
-  showSection('config');
-}
+document.getElementById('fd').value=new Date().toISOString().split('T')[0];
+if(init()){go(0);}else{go(3);}
 </script>
 </body>
 </html>
