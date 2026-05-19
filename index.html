@@ -15,45 +15,58 @@ header{background:#fff;border-bottom:1px solid #e2e0da;padding:0 24px;display:fl
 nav{display:flex;gap:4px;}
 button.nb{padding:7px 16px;border-radius:8px;border:none;background:none;font-size:14px;font-family:'Noto Sans KR',sans-serif;cursor:pointer;color:#888;font-weight:500;}
 button.nb.on{background:#1a1a1a;color:#fff;}
-main{max-width:900px;margin:0 auto;padding:28px 20px;}
+main{max-width:960px;margin:0 auto;padding:28px 20px;}
 .sec{display:none;}
 .sec.on{display:block;}
-.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:24px;}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px;}
+.stats4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px;}
 .stat{background:#fff;border:1px solid #e2e0da;border-radius:12px;padding:18px 20px;}
 .sl{font-size:12px;color:#888;margin-bottom:6px;}
-.sv{font-size:24px;font-weight:700;}
+.sv{font-size:22px;font-weight:700;}
 .sv.g{color:#16a34a;}
 .sv.r{color:#dc2626;}
-.toolbar{display:flex;gap:8px;margin-bottom:16px;align-items:center;flex-wrap:wrap;}
+.toolbar{display:flex;gap:8px;margin-bottom:10px;align-items:center;flex-wrap:wrap;}
 button.fb{padding:6px 14px;border-radius:999px;border:1px solid #e2e0da;background:#fff;font-size:13px;font-family:'Noto Sans KR',sans-serif;cursor:pointer;color:#888;}
 button.fb.on{background:#1a1a1a;color:#fff;border-color:#1a1a1a;}
 button.ab{margin-left:auto;padding:8px 18px;border-radius:8px;border:none;background:#1a1a1a;color:#fff;font-size:14px;font-family:'Noto Sans KR',sans-serif;font-weight:500;cursor:pointer;}
+.fifo-note{font-size:11px;color:#aaa;margin-bottom:12px;display:flex;align-items:center;gap:6px;}
+.fifo-dot{width:5px;height:5px;background:#16a34a;border-radius:50%;display:inline-block;}
 .list{display:flex;flex-direction:column;gap:10px;}
 .card{background:#fff;border:1px solid #e2e0da;border-radius:12px;padding:18px 20px;}
-.ctop{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;}
+.ctop{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;}
 .cn{font-size:15px;font-weight:700;margin-bottom:3px;}
-.cs{font-size:12px;color:#888;}
-.badge{font-size:11px;font-weight:700;padding:3px 10px;border-radius:999px;}
+.cs{font-size:12px;color:#888;margin-bottom:3px;}
+.ccode{font-size:11px;color:#bbb;}
+.badges{display:flex;gap:5px;align-items:center;flex-wrap:wrap;justify-content:flex-end;}
+.badge{font-size:11px;font-weight:700;padding:3px 10px;border-radius:999px;white-space:nowrap;}
 .bY{background:#fef9c3;color:#854d0e;}
 .bB{background:#dbeafe;color:#2563eb;}
+.bP{background:#f3e8ff;color:#7c3aed;}
 .bG{background:#dcfce7;color:#16a34a;}
+.bCat{background:#f1f5f9;color:#475569;}
+.qty-bar{background:#f8f8f6;border-radius:8px;padding:8px 12px;margin-bottom:12px;display:flex;align-items:center;gap:10px;}
+.qty-label{font-size:11px;color:#888;white-space:nowrap;}
+.qty-val{font-size:13px;font-weight:700;white-space:nowrap;}
+.qty-track{flex:1;height:5px;background:#e2e0da;border-radius:999px;overflow:hidden;min-width:40px;}
+.qty-fill{height:100%;background:#16a34a;border-radius:999px;}
 .meta{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px;}
 .ml{font-size:11px;color:#888;}
 .mv{font-size:13px;font-weight:500;}
 .mv.g{color:#16a34a;}
 .mv.r{color:#dc2626;}
-.acts{display:flex;gap:8px;border-top:1px solid #e2e0da;padding-top:12px;}
+.acts{display:flex;gap:8px;border-top:1px solid #e2e0da;padding-top:12px;flex-wrap:wrap;}
 button.btn{padding:6px 14px;border-radius:8px;border:1px solid #e2e0da;background:none;font-size:13px;font-family:'Noto Sans KR',sans-serif;cursor:pointer;color:#1a1a1a;}
 button.btnP{padding:6px 14px;border-radius:8px;border:none;background:#1a1a1a;color:#fff;font-size:13px;font-family:'Noto Sans KR',sans-serif;cursor:pointer;}
+button.btnV{padding:6px 14px;border-radius:8px;border:none;background:#7c3aed;color:#fff;font-size:13px;font-family:'Noto Sans KR',sans-serif;cursor:pointer;}
 button.btnD{padding:6px 14px;border-radius:8px;border:1px solid #fca5a5;background:none;font-size:13px;font-family:'Noto Sans KR',sans-serif;cursor:pointer;color:#dc2626;}
 .inf{background:#f5f4f0;border-radius:8px;padding:14px;margin-top:12px;display:none;}
 .inf.on{display:block;}
-.ig{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px;}
+.ig{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px;}
 .ig input,.ig select,.inf select{padding:7px 10px;border:1px solid #e2e0da;border-radius:8px;font-size:13px;font-family:'Noto Sans KR',sans-serif;background:#fff;width:100%;}
 .il{font-size:11px;color:#888;margin-bottom:4px;}
 .empty{text-align:center;padding:60px 20px;color:#888;font-size:14px;}
 .loading{text-align:center;padding:40px;color:#888;font-size:14px;}
-.fc{background:#fff;border:1px solid #e2e0da;border-radius:12px;padding:28px;max-width:600px;}
+.fc{background:#fff;border:1px solid #e2e0da;border-radius:12px;padding:28px;max-width:660px;}
 .ft{font-size:18px;font-weight:700;margin-bottom:24px;}
 .fg{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;}
 .fg label{font-size:13px;color:#888;font-weight:500;display:block;margin-bottom:6px;}
@@ -70,6 +83,12 @@ button.cb{padding:10px 24px;border-radius:8px;border:1px solid #e2e0da;backgroun
 .al{padding:12px 16px;border-radius:8px;font-size:13px;margin-bottom:16px;}
 .alOk{background:#dcfce7;color:#16a34a;}
 .alErr{background:#fee2e2;color:#dc2626;}
+.sql-box{background:#f8f9fa;border:1px solid #e2e0da;border-radius:8px;padding:14px;margin-top:8px;font-size:12px;line-height:1.8;font-family:monospace;color:#374151;white-space:pre-wrap;word-break:break-all;}
+.stab{width:100%;border-collapse:collapse;margin-top:8px;}
+.stab th{font-size:12px;color:#888;padding:8px 12px;text-align:left;border-bottom:1px solid #e2e0da;font-weight:500;}
+.stab td{font-size:13px;padding:8px 12px;border-bottom:1px solid #f5f4f0;}
+.stab tr:last-child td{border-bottom:none;}
+select.cfsel{padding:6px 10px;border-radius:999px;border:1px solid #e2e0da;background:#fff;font-size:13px;font-family:'Noto Sans KR',sans-serif;color:#888;cursor:pointer;}
 </style>
 </head>
 <body>
@@ -83,30 +102,51 @@ button.cb{padding:10px 24px;border-radius:8px;border:1px solid #e2e0da;backgroun
   </nav>
 </header>
 <main>
+
+  <!-- 재고 현황 -->
   <div class="sec" id="s0">
     <div class="stats">
-      <div class="stat"><div class="sl">전체 재고</div><div class="sv" id="h0">-</div></div>
-      <div class="stat"><div class="sl">보유 / 등록중</div><div class="sv" id="h1">-</div></div>
+      <div class="stat"><div class="sl">전체 배치 수</div><div class="sv" id="h0">-</div></div>
+      <div class="stat"><div class="sl">보유 중인 수량</div><div class="sv" id="h1">-</div></div>
       <div class="stat"><div class="sl">이번달 수익</div><div class="sv" id="h2">-</div></div>
     </div>
     <div class="toolbar">
       <button class="fb on" onclick="filt('all',this)">전체</button>
       <button class="fb" onclick="filt('보유중',this)">보유중</button>
       <button class="fb" onclick="filt('등록중',this)">등록중</button>
+      <button class="fb" onclick="filt('발송완료',this)">발송완료</button>
       <button class="fb" onclick="filt('판매완료',this)">판매완료</button>
+      <select class="cfsel" id="catFilter" onchange="render()">
+        <option value="all">전체 카테고리</option>
+        <option>신발</option><option>의류</option><option>잡화</option><option>액세서리</option><option>기타</option>
+      </select>
       <button class="ab" onclick="go(1)">+ 매입 등록</button>
     </div>
+    <div class="fifo-note"><span class="fifo-dot"></span>FIFO 정렬 — 오래된 매입 우선 표시</div>
     <div id="itemList" class="list"><div class="loading">불러오는 중...</div></div>
   </div>
 
+  <!-- 매입 등록 -->
   <div class="sec" id="s1">
     <div class="fc">
       <div class="ft">매입 등록</div>
       <div class="fg">
         <div class="full"><label>상품명 *</label><input type="text" id="fn" placeholder="나이키 에어포스1 화이트"/></div>
+        <div><label>브랜드</label><input type="text" id="fbr" placeholder="Nike"/></div>
+        <div><label>카테고리</label>
+          <select id="fcat">
+            <option>신발</option><option>의류</option><option>잡화</option><option>액세서리</option><option>기타</option>
+          </select>
+        </div>
         <div><label>사이즈</label><input type="text" id="fz" placeholder="270"/></div>
-        <div><label>매입처</label><select id="fs"><option>SSG</option><option>무신사</option><option>네이버</option><option>오프라인</option><option>기타</option></select></div>
-        <div><label>매입가 (원) *</label><input type="number" id="fp" placeholder="150000"/></div>
+        <div><label>상품코드</label><input type="text" id="fpc" placeholder="DD1391-100"/></div>
+        <div><label>매입처</label>
+          <select id="fs">
+            <option>SSG</option><option>무신사</option><option>네이버</option><option>오프라인</option><option>기타</option>
+          </select>
+        </div>
+        <div><label>매입가 (원, 개당) *</label><input type="number" id="fp" placeholder="150000"/></div>
+        <div><label>수량 *</label><input type="number" id="fq" value="1" min="1"/></div>
         <div><label>매입일 *</label><input type="date" id="fd"/></div>
         <div class="full"><label>메모</label><input type="text" id="fm" placeholder="보관 위치 등"/></div>
       </div>
@@ -117,19 +157,34 @@ button.cb{padding:10px 24px;border-radius:8px;border:1px solid #e2e0da;backgroun
     </div>
   </div>
 
+  <!-- 수익 통계 -->
   <div class="sec" id="s2">
     <div class="stats">
       <div class="stat"><div class="sl">총 매입 비용</div><div class="sv" id="p0">-</div></div>
       <div class="stat"><div class="sl">총 판매 수익</div><div class="sv" id="p1">-</div></div>
       <div class="stat"><div class="sl">총 순수익</div><div class="sv" id="p2">-</div></div>
     </div>
+    <div class="stats4">
+      <div class="stat"><div class="sl">평균 매입가 (개당)</div><div class="sv" id="p6">-</div></div>
+      <div class="stat"><div class="sl">평균 판매가 (개당)</div><div class="sv" id="p7">-</div></div>
+      <div class="stat"><div class="sl">평균 수익률</div><div class="sv" id="p8">-</div></div>
+      <div class="stat"><div class="sl">총 판매 수량</div><div class="sv g" id="p5">-</div></div>
+    </div>
     <div class="stats">
-      <div class="stat"><div class="sl">보유중</div><div class="sv" id="p3">-</div></div>
-      <div class="stat"><div class="sl">등록중</div><div class="sv" id="p4">-</div></div>
-      <div class="stat"><div class="sl">판매완료</div><div class="sv g" id="p5">-</div></div>
+      <div class="stat"><div class="sl">보유중 배치</div><div class="sv" id="p3">-</div></div>
+      <div class="stat"><div class="sl">등록중/발송완료 배치</div><div class="sv" id="p4">-</div></div>
+      <div class="stat"><div class="sl">판매완료 배치</div><div class="sv g" id="p9">-</div></div>
+    </div>
+    <div class="fc" style="max-width:100%;margin-top:8px;">
+      <div style="font-size:15px;font-weight:700;margin-bottom:16px;">카테고리별 현황</div>
+      <table class="stab">
+        <thead><tr><th>카테고리</th><th>총 매입</th><th>총 순수익</th><th>총 수량</th></tr></thead>
+        <tbody id="catStats"></tbody>
+      </table>
     </div>
   </div>
 
+  <!-- 설정 -->
   <div class="sec" id="s3">
     <div class="cfg">
       <h2>Supabase 연결 설정</h2>
@@ -140,8 +195,18 @@ button.cb{padding:10px 24px;border-radius:8px;border:1px solid #e2e0da;backgroun
       <label>Publishable Key</label>
       <input type="text" id="ck" placeholder="sb_publishable_..."/>
       <button class="sb" onclick="saveCfg()">저장 및 연결</button>
+      <div style="margin-top:28px;padding-top:24px;border-top:1px solid #e2e0da;">
+        <div style="font-size:14px;font-weight:700;margin-bottom:6px;">DB 마이그레이션 (최초 1회)</div>
+        <div style="font-size:12px;color:#888;margin-bottom:8px;">Supabase → SQL Editor에서 아래 쿼리를 실행하세요:</div>
+        <div class="sql-box">ALTER TABLE items ADD COLUMN IF NOT EXISTS quantity INT DEFAULT 1;
+ALTER TABLE items ADD COLUMN IF NOT EXISTS sold_quantity INT DEFAULT 0;
+ALTER TABLE items ADD COLUMN IF NOT EXISTS category TEXT DEFAULT '기타';
+ALTER TABLE items ADD COLUMN IF NOT EXISTS brand TEXT DEFAULT '';
+ALTER TABLE items ADD COLUMN IF NOT EXISTS product_code TEXT DEFAULT '';</div>
+      </div>
     </div>
   </div>
+
 </main>
 <script>
 var sb=null,items=[],cf='all',oid=null;
@@ -187,16 +252,23 @@ function filt(f,btn){
 async function load(){
   if(!sb){document.getElementById('itemList').innerHTML='<div class="empty">설정 탭에서 Supabase 키를 먼저 입력해주세요.</div>';return;}
   document.getElementById('itemList').innerHTML='<div class="loading">불러오는 중...</div>';
-  var res=await sb.from('items').select('*').order('created_at',{ascending:false});
+  var res=await sb.from('items').select('*').order('buy_date',{ascending:true}).order('created_at',{ascending:true});
   if(res.error){document.getElementById('itemList').innerHTML='<div class="empty">데이터를 불러오지 못했어요.</div>';return;}
   items=res.data||[];
+
   var total=items.length;
-  var active=items.filter(function(i){return i.status!=='판매완료';}).length;
+  var holdQty=items.filter(function(i){return i.status!=='판매완료';}).reduce(function(s,i){
+    return s+((i.quantity||1)-(i.sold_quantity||0));
+  },0);
   var now=new Date();
   var mm=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
-  var profit=items.filter(function(i){return i.status==='판매완료'&&i.sell_date&&i.sell_date.startsWith(mm);}).reduce(function(s,i){return s+i.sell_price-i.buy_price-(i.fee||0);},0);
+  var profit=items.filter(function(i){return i.status==='판매완료'&&i.sell_date&&i.sell_date.startsWith(mm);}).reduce(function(s,i){
+    var sq=i.sold_quantity||i.quantity||1;
+    return s+(i.sell_price||0)*sq-(i.buy_price||0)*sq-(i.fee||0);
+  },0);
+
   document.getElementById('h0').textContent=total+'개';
-  document.getElementById('h1').textContent=active+'개';
+  document.getElementById('h1').textContent=holdQty+'개';
   var pe=document.getElementById('h2');
   pe.textContent=(profit>=0?'+':'')+profit.toLocaleString()+'원';
   pe.className='sv '+(profit>=0?'g':'r');
@@ -204,43 +276,130 @@ async function load(){
 }
 
 function render(){
-  var filtered=cf==='all'?items:items.filter(function(i){return i.status===cf;});
+  var cat=document.getElementById('catFilter').value;
+  var filtered=items.filter(function(i){
+    if(cf!=='all'&&i.status!==cf)return false;
+    if(cat!=='all'&&(i.category||'기타')!==cat)return false;
+    return true;
+  });
   var el=document.getElementById('itemList');
   if(!filtered.length){el.innerHTML='<div class="empty">해당하는 상품이 없어요</div>';return;}
-  el.innerHTML=filtered.map(function(it){return card(it);}).join('');
+  el.innerHTML=filtered.map(card).join('');
+}
+
+function statusBadge(s){
+  if(s==='보유중')return 'bY';
+  if(s==='등록중')return 'bB';
+  if(s==='발송완료')return 'bP';
+  return 'bG';
 }
 
 function card(it){
-  var profit=it.status==='판매완료'?it.sell_price-it.buy_price-(it.fee||0):null;
-  var ph=profit!==null?'<div><div class="ml">순수익</div><div class="mv '+(profit>=0?'g':'r')+'">'+(profit>=0?'+':'')+profit.toLocaleString()+'원</div></div>':'';
-  var sm=it.status==='판매완료'?'<div><div class="ml">판매가</div><div class="mv">'+it.sell_price.toLocaleString()+'원</div></div><div><div class="ml">판매일</div><div class="mv">'+(it.sell_date||'-')+'</div></div><div><div class="ml">플랫폼</div><div class="mv">'+(it.platform||'-')+'</div></div>'+ph:'';
-  var lm=it.status==='등록중'?'<div><div class="ml">등록 플랫폼</div><div class="mv">'+(it.platform||'-')+'</div></div>':'';
-  var acts='';
-  if(it.status==='보유중') acts='<button class="btn" onclick="tog(\'lf'+it.id+'\')">플랫폼 등록</button><button class="btnD" onclick="del(\''+it.id+'\')">삭제</button>';
-  else if(it.status==='등록중') acts='<button class="btnP" onclick="tog(\'sf'+it.id+'\')">판매 완료</button><button class="btnD" onclick="del(\''+it.id+'\')">삭제</button>';
-  var lf=it.status==='보유중'?'<div class="inf'+(oid==='lf'+it.id?' on':'')+'" id="lf'+it.id+'"><div class="il">등록 플랫폼</div><select id="lp'+it.id+'" style="width:200px;padding:7px 10px;border:1px solid #e2e0da;border-radius:8px;font-size:13px;margin-bottom:10px;"><option>크림</option><option>포이즌</option><option>기타</option></select><br><button class="btnP" onclick="confList(\''+it.id+'\')">등록 확정</button></div>':'';
-  var sf=it.status==='등록중'?'<div class="inf'+(oid==='sf'+it.id?' on':'')+'" id="sf'+it.id+'"><div class="ig"><div><div class="il">판매가 (원)</div><input type="number" id="sp'+it.id+'" placeholder="200000"></div><div><div class="il">수수료 (원)</div><input type="number" id="fe'+it.id+'" placeholder="10000"></div><div><div class="il">판매일</div><input type="date" id="sd'+it.id+'" value="'+new Date().toISOString().split('T')[0]+'"></div></div><button class="btnP" onclick="confSell(\''+it.id+'\')">판매 확정</button></div>':'';
-  var bc=it.status==='보유중'?'bY':it.status==='등록중'?'bB':'bG';
-  return '<div class="card"><div class="ctop"><div><div class="cn">'+it.name+(it.size?' '+it.size:'')+'</div><div class="cs">'+it.source+' · 매입 '+it.buy_date+'</div></div><span class="badge '+bc+'">'+it.status+'</span></div><div class="meta"><div><div class="ml">매입가</div><div class="mv">'+it.buy_price.toLocaleString()+'원</div></div>'+sm+lm+(it.note?'<div style="grid-column:1/-1"><div class="ml">메모</div><div class="mv" style="font-size:12px;">'+it.note+'</div></div>':'')+'</div>'+(acts?'<div class="acts">'+acts+'</div>':'')+lf+sf+'</div>';
+  var qty=it.quantity||1;
+  var sold=it.sold_quantity||0;
+  var remain=qty-sold;
+  var cat=it.category||'기타';
+  var bc=statusBadge(it.status);
+
+  var qtyHtml='';
+  if(qty>1){
+    var pct=Math.round(sold/qty*100);
+    qtyHtml='<div class="qty-bar">'+
+      '<span class="qty-label">수량</span>'+
+      '<span class="qty-val">'+qty+'개 중 '+sold+'개 판매</span>'+
+      '<div class="qty-track"><div class="qty-fill" style="width:'+pct+'%"></div></div>'+
+      '</div>';
+  }
+
+  var brandTxt=it.brand?'<span style="color:#aaa;font-weight:400;font-size:13px;">'+it.brand+'&nbsp;</span>':'';
+  var titleHtml=brandTxt+(it.name||'')+(it.size?' <span style="color:#888;font-size:13px;">'+it.size+'</span>':'');
+  var codeTxt=it.product_code?'<div class="ccode">'+it.product_code+'</div>':'';
+
+  var metaItems='<div><div class="ml">매입가 (개당)</div><div class="mv">'+(it.buy_price||0).toLocaleString()+'원</div></div>';
+
+  if(it.status==='판매완료'&&sold>0){
+    var profit=(it.sell_price||0)*sold-(it.buy_price||0)*sold-(it.fee||0);
+    metaItems+='<div><div class="ml">판매가 (개당)</div><div class="mv">'+(it.sell_price||0).toLocaleString()+'원</div></div>'+
+      '<div><div class="ml">판매일</div><div class="mv">'+(it.sell_date||'-')+'</div></div>'+
+      '<div><div class="ml">플랫폼</div><div class="mv">'+(it.platform||'-')+'</div></div>'+
+      '<div><div class="ml">순수익</div><div class="mv '+(profit>=0?'g':'r')+'">'+(profit>=0?'+':'')+profit.toLocaleString()+'원</div></div>';
+  }else if(it.status==='등록중'||it.status==='발송완료'){
+    metaItems+='<div><div class="ml">등록 플랫폼</div><div class="mv">'+(it.platform||'-')+'</div></div>';
+  }
+  if(it.note){
+    metaItems+='<div style="grid-column:1/-1"><div class="ml">메모</div><div class="mv" style="font-size:12px;">'+it.note+'</div></div>';
+  }
+
+  var acts='';var inlineForm='';
+  if(it.status==='보유중'){
+    acts='<button class="btnP" onclick="tog(\'lf'+it.id+'\')">플랫폼 등록</button>'+
+         '<button class="btnD" onclick="del(\''+it.id+'\')">삭제</button>';
+    inlineForm='<div class="inf'+(oid==='lf'+it.id?' on':'')+'" id="lf'+it.id+'">'+
+      '<div class="il">등록 플랫폼</div>'+
+      '<select id="lp'+it.id+'" style="width:180px;padding:7px 10px;border:1px solid #e2e0da;border-radius:8px;font-size:13px;margin-bottom:10px;">'+
+      '<option>크림</option><option>포이즌</option><option>기타</option></select><br>'+
+      '<button class="btnP" onclick="confList(\''+it.id+'\')">등록 확정</button></div>';
+  }else if(it.status==='등록중'){
+    acts='<button class="btnV" onclick="confShip(\''+it.id+'\')">발송 처리</button>'+
+         '<button class="btnD" onclick="del(\''+it.id+'\')">삭제</button>';
+  }else if(it.status==='발송완료'||(it.status==='판매완료'&&remain>0)){
+    var btnLabel=it.status==='발송완료'?'판매 확정':'추가 판매';
+    var fkey='sf'+it.id;
+    acts='<button class="btnP" onclick="tog(\''+fkey+'\')">'+btnLabel+'</button>'+
+         '<button class="btnD" onclick="del(\''+it.id+'\')">삭제</button>';
+    inlineForm='<div class="inf'+(oid===fkey?' on':'')+'" id="'+fkey+'">'+
+      '<div class="ig">'+
+      '<div><div class="il">판매 수량 (최대 '+remain+'개)</div><input type="number" id="sq'+it.id+'" value="'+remain+'" min="1" max="'+remain+'"></div>'+
+      '<div><div class="il">판매가 (원, 개당)</div><input type="number" id="sp'+it.id+'" placeholder="200000"></div>'+
+      '<div><div class="il">수수료 (원, 합계)</div><input type="number" id="fe'+it.id+'" placeholder="10000"></div>'+
+      '<div><div class="il">판매일</div><input type="date" id="sd'+it.id+'" value="'+new Date().toISOString().split('T')[0]+'"></div>'+
+      '</div>'+
+      '<button class="btnP" onclick="confSell(\''+it.id+'\','+remain+')">판매 확정</button></div>';
+  }else{
+    acts='<button class="btnD" onclick="del(\''+it.id+'\')">삭제</button>';
+  }
+
+  return '<div class="card">'+
+    '<div class="ctop">'+
+      '<div style="flex:1">'+
+        '<div class="cn">'+titleHtml+'</div>'+
+        '<div class="cs">'+(it.source||'')+(it.buy_date?' · 매입 '+it.buy_date:'')+'</div>'+
+        codeTxt+
+      '</div>'+
+      '<div class="badges">'+
+        '<span class="badge bCat">'+cat+'</span>'+
+        '<span class="badge '+bc+'">'+it.status+'</span>'+
+      '</div>'+
+    '</div>'+
+    qtyHtml+
+    '<div class="meta">'+metaItems+'</div>'+
+    (acts?'<div class="acts">'+acts+'</div>':'')+
+    inlineForm+
+    '</div>';
 }
 
 function tog(key){oid=oid===key?null:key;render();}
 
 async function addItem(){
   var name=document.getElementById('fn').value.trim();
+  var brand=document.getElementById('fbr').value.trim();
+  var category=document.getElementById('fcat').value;
   var size=document.getElementById('fz').value.trim();
+  var productCode=document.getElementById('fpc').value.trim();
   var source=document.getElementById('fs').value;
   var price=parseInt(document.getElementById('fp').value);
+  var qty=parseInt(document.getElementById('fq').value)||1;
   var date=document.getElementById('fd').value;
   var note=document.getElementById('fm').value.trim();
   if(!name||!price||!date){alert('상품명, 매입가, 매입일은 필수예요!');return;}
   if(!sb){alert('설정 탭에서 Supabase 키를 먼저 입력해주세요.');return;}
-  var res=await sb.from('items').insert([{name:name,size:size,source:source,buy_price:price,buy_date:date,note:note,status:'보유중'}]);
+  var res=await sb.from('items').insert([{
+    name:name,size:size,source:source,buy_price:price,buy_date:date,note:note,status:'보유중',
+    brand:brand,category:category,product_code:productCode,quantity:qty,sold_quantity:0
+  }]);
   if(res.error){alert('등록 실패: '+res.error.message);return;}
-  document.getElementById('fn').value='';
-  document.getElementById('fz').value='';
-  document.getElementById('fp').value='';
-  document.getElementById('fm').value='';
+  ['fn','fbr','fz','fpc','fp','fm'].forEach(function(id){document.getElementById(id).value='';});
+  document.getElementById('fq').value='1';
   alert('매입 등록 완료!');
   go(0);
 }
@@ -252,12 +411,28 @@ async function confList(id){
   oid=null;load();
 }
 
-async function confSell(id){
+async function confShip(id){
+  var res=await sb.from('items').update({status:'발송완료'}).eq('id',id);
+  if(res.error){alert('오류: '+res.error.message);return;}
+  load();
+}
+
+async function confSell(id,maxRemain){
+  var sellQty=parseInt(document.getElementById('sq'+id).value)||maxRemain;
   var sp=parseInt(document.getElementById('sp'+id).value);
   var fee=parseInt(document.getElementById('fe'+id).value)||0;
   var sd=document.getElementById('sd'+id).value;
   if(!sp||!sd){alert('판매가와 판매일을 입력해주세요.');return;}
-  var res=await sb.from('items').update({status:'판매완료',sell_price:sp,fee:fee,sell_date:sd}).eq('id',id);
+  if(sellQty<1||sellQty>maxRemain){alert('판매 수량을 확인해주세요.');return;}
+
+  var item=items.find(function(i){return i.id==id;});
+  var newSold=(item.sold_quantity||0)+sellQty;
+  var totalQty=item.quantity||1;
+  var newStatus=newSold>=totalQty?'판매완료':item.status;
+
+  var res=await sb.from('items').update({
+    status:newStatus,sell_price:sp,fee:(item.fee||0)+fee,sell_date:sd,sold_quantity:newSold
+  }).eq('id',id);
   if(res.error){alert('오류: '+res.error.message);return;}
   oid=null;load();
 }
@@ -273,18 +448,54 @@ async function loadStats(){
   if(!sb)return;
   var res=await sb.from('items').select('*');
   var its=res.data||[];
-  var tb=its.reduce(function(s,i){return s+i.buy_price;},0);
-  var sold=its.filter(function(i){return i.status==='판매완료';});
-  var ts=sold.reduce(function(s,i){return s+(i.sell_price||0);},0);
-  var tp=sold.reduce(function(s,i){return s+i.sell_price-i.buy_price-(i.fee||0);},0);
+
+  var tb=its.reduce(function(s,i){return s+(i.buy_price||0)*(i.quantity||1);},0);
+  var soldItems=its.filter(function(i){return (i.sold_quantity||0)>0;});
+  var ts=soldItems.reduce(function(s,i){return s+(i.sell_price||0)*(i.sold_quantity||0);},0);
+  var tp=soldItems.reduce(function(s,i){
+    var sq=i.sold_quantity||0;
+    return s+(i.sell_price||0)*sq-(i.buy_price||0)*sq-(i.fee||0);
+  },0);
+
+  var totalUnits=its.reduce(function(s,i){return s+(i.quantity||1);},0);
+  var avgBuy=totalUnits>0?Math.round(tb/totalUnits):0;
+  var soldUnits=soldItems.reduce(function(s,i){return s+(i.sold_quantity||0);},0);
+  var avgSell=soldUnits>0?Math.round(ts/soldUnits):0;
+  var totalBuyCost=soldItems.reduce(function(s,i){return s+(i.buy_price||0)*(i.sold_quantity||0);},0);
+  var profitRate=totalBuyCost>0?Math.round(tp/totalBuyCost*100):0;
+
   document.getElementById('p0').textContent=tb.toLocaleString()+'원';
   document.getElementById('p1').textContent=ts.toLocaleString()+'원';
   var pe=document.getElementById('p2');
   pe.textContent=(tp>=0?'+':'')+tp.toLocaleString()+'원';
   pe.className='sv '+(tp>=0?'g':'r');
+  document.getElementById('p6').textContent=avgBuy.toLocaleString()+'원';
+  document.getElementById('p7').textContent=avgSell>0?avgSell.toLocaleString()+'원':'-';
+  var pr=document.getElementById('p8');
+  pr.textContent=soldUnits>0?(profitRate>=0?'+':'')+profitRate+'%':'-';
+  pr.className='sv '+(profitRate>=0?'g':'r');
+  document.getElementById('p5').textContent=soldUnits+'개';
   document.getElementById('p3').textContent=its.filter(function(i){return i.status==='보유중';}).length+'개';
-  document.getElementById('p4').textContent=its.filter(function(i){return i.status==='등록중';}).length+'개';
-  document.getElementById('p5').textContent=sold.length+'개';
+  document.getElementById('p4').textContent=its.filter(function(i){return i.status==='등록중'||i.status==='발송완료';}).length+'개';
+  document.getElementById('p9').textContent=its.filter(function(i){return i.status==='판매완료';}).length+'개';
+
+  var cats=['신발','의류','잡화','액세서리','기타'];
+  var rows=cats.map(function(cat){
+    var ci=its.filter(function(i){return (i.category||'기타')===cat;});
+    if(!ci.length)return '';
+    var cBuy=ci.reduce(function(s,i){return s+(i.buy_price||0)*(i.quantity||1);},0);
+    var cProfit=ci.filter(function(i){return (i.sold_quantity||0)>0;}).reduce(function(s,i){
+      var sq=i.sold_quantity||0;
+      return s+(i.sell_price||0)*sq-(i.buy_price||0)*sq-(i.fee||0);
+    },0);
+    var cQty=ci.reduce(function(s,i){return s+(i.quantity||1);},0);
+    var pc=cProfit>=0?'color:#16a34a':'color:#dc2626';
+    return '<tr><td>'+cat+'</td><td>'+cBuy.toLocaleString()+'원</td>'+
+      '<td style="font-weight:500;'+pc+'">'+(cProfit>=0?'+':'')+cProfit.toLocaleString()+'원</td>'+
+      '<td>'+cQty+'개</td></tr>';
+  }).join('');
+  document.getElementById('catStats').innerHTML=rows||
+    '<tr><td colspan="4" style="color:#888;text-align:center;padding:20px;">데이터 없음</td></tr>';
 }
 
 document.getElementById('fd').value=new Date().toISOString().split('T')[0];

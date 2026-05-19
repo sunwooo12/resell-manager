@@ -1,0 +1,18 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "shell": "powershell",
+            "command": "$raw = @($input) -join ''; $json = $raw | ConvertFrom-Json; $f = $json.tool_input.file_path; if ($f -and ($f -like '*resell-manager*')) { Set-Location 'C:\\Users\\tjsdn\\resell-manager'; git config user.email 'tjsdnicloud@gmail.com'; git config user.name 'sunwooo12'; git add $f; $fname = Split-Path -Leaf $f; git commit -m \"auto: $fname 수정\" 2>&1 | Out-Null; git push 2>&1 | Out-Null }",
+            "statusMessage": "GitHub에 자동 푸시 중...",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}
