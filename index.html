@@ -155,6 +155,7 @@ select.cfsel{padding:6px 10px;border-radius:999px;border:1px solid #e2e0da;backg
         <div><label>매입가 (원, 개당) *</label><input type="number" id="fp" placeholder="150000"/></div>
         <div><label>수량 *</label><input type="number" id="fq" value="1" min="1"/></div>
         <div><label>매입일 *</label><input type="date" id="fd"/></div>
+        <div class="full"><label>주문내역 URL</label><input type="url" id="furl" placeholder="https://..."/></div>
         <div class="full"><label>메모</label><input type="text" id="fm" placeholder="보관 위치 등"/></div>
       </div>
       <div class="fa">
@@ -209,7 +210,8 @@ select.cfsel{padding:6px 10px;border-radius:999px;border:1px solid #e2e0da;backg
 ALTER TABLE items ADD COLUMN IF NOT EXISTS sold_quantity INT DEFAULT 0;
 ALTER TABLE items ADD COLUMN IF NOT EXISTS category TEXT DEFAULT '기타';
 ALTER TABLE items ADD COLUMN IF NOT EXISTS brand TEXT DEFAULT '';
-ALTER TABLE items ADD COLUMN IF NOT EXISTS product_code TEXT DEFAULT '';</div>
+ALTER TABLE items ADD COLUMN IF NOT EXISTS product_code TEXT DEFAULT '';
+ALTER TABLE items ADD COLUMN IF NOT EXISTS order_url TEXT DEFAULT '';</div>
       </div>
     </div>
   </div>
@@ -364,6 +366,7 @@ function buildEditForm(it,ekey){
       '<div><div class="il">매입가 (개당)</div><input type="number" id="ep'+it.id+'" value="'+(it.buy_price||'')+'" style="'+s+'"></div>'+
       '<div><div class="il">수량</div><input type="number" id="eq'+it.id+'" value="'+(it.quantity||1)+'" min="'+(it.sold_quantity||0)+'" style="'+s+'"></div>'+
       '<div><div class="il">매입일</div><input type="date" id="ed'+it.id+'" value="'+(it.buy_date||'')+'" style="'+s+'"></div>'+
+      '<div style="grid-column:1/-1"><div class="il">주문내역 URL</div><input type="url" id="eurl'+it.id+'" value="'+esc(it.order_url)+'" style="'+s+'" placeholder="https://..."></div>'+
       '<div style="grid-column:1/-1"><div class="il">메모</div><input type="text" id="em'+it.id+'" value="'+esc(it.note)+'" style="'+s+'"></div>'+
     '</div>'+
     '<div style="display:flex;gap:8px;">'+
@@ -423,7 +426,8 @@ function card(it,batchNum,totalBatches){
   }
 
   var ekey='ef'+it.id;
-  var acts='<button class="btn" onclick="tog(\''+ekey+'\')">수정</button>';
+  var urlBtn=it.order_url?'<a href="'+esc(it.order_url)+'" target="_blank" rel="noopener" class="btn" style="text-decoration:none;">주문확인</a>':'';
+  var acts='<button class="btn" onclick="tog(\''+ekey+'\')">수정</button>'+urlBtn;
   var inlineForm=buildEditForm(it,ekey);
   if(it.status==='보유중'){
     acts+='<button class="btnP" onclick="tog(\'lf'+it.id+'\')">플랫폼 등록</button>'+
@@ -507,15 +511,16 @@ async function addItem(){
   var price=parseInt(document.getElementById('fp').value);
   var qty=parseInt(document.getElementById('fq').value)||1;
   var date=document.getElementById('fd').value;
+  var orderUrl=document.getElementById('furl').value.trim();
   var note=document.getElementById('fm').value.trim();
   if(!name||!price||!date){alert('상품명, 매입가, 매입일은 필수예요!');return;}
   if(!sb){alert('설정 탭에서 Supabase 키를 먼저 입력해주세요.');return;}
   var res=await sb.from('items').insert([{
     name:name,size:size,source:source,buy_price:price,buy_date:date,note:note,status:'보유중',
-    brand:brand,category:category,product_code:productCode,quantity:qty,sold_quantity:0
+    brand:brand,category:category,product_code:productCode,quantity:qty,sold_quantity:0,order_url:orderUrl
   }]);
   if(res.error){alert('등록 실패: '+res.error.message);return;}
-  ['fn','fbr','fz','fpc','fp','fm'].forEach(function(id){document.getElementById(id).value='';});
+  ['fn','fbr','fz','fpc','fp','fm','furl'].forEach(function(id){document.getElementById(id).value='';});
   document.getElementById('fq').value='1';
   alert('매입 등록 완료!');
   go(0);
@@ -573,9 +578,10 @@ async function updateItem(id){
   var date=document.getElementById('ed'+id).value;
   var note=document.getElementById('em'+id).value.trim();
   if(!name||!price||!date){alert('상품명, 매입가, 매입일은 필수예요!');return;}
+  var orderUrl=document.getElementById('eurl'+id).value.trim();
   var res=await sb.from('items').update({
     name:name,brand:brand,category:category,size:size,product_code:productCode,
-    source:source,buy_price:price,quantity:qty,buy_date:date,note:note
+    source:source,buy_price:price,quantity:qty,buy_date:date,note:note,order_url:orderUrl
   }).eq('id',id);
   if(res.error){alert('오류: '+res.error.message);return;}
   oid=null;load();
