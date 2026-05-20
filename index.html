@@ -694,6 +694,14 @@ async function updateItem(id){
   if(platform){updateData.platform=platform;}
   var newStatus=document.getElementById('est2'+id).value;
   if(newStatus){updateData.status=newStatus;}
+  // 판매가·정산금액 모두 지우면 판매 취소로 간주 → 보유중 복귀 + 판매 정보 초기화
+  if(item&&item.status==='판매완료'&&!sellPrice&&!settle){
+    updateData.status='보유중';
+    updateData.sell_price=null;
+    updateData.sell_date=null;
+    updateData.fee=0;
+    updateData.sold_quantity=0;
+  }
   var res=await sb.from('items').update(updateData).eq('id',id);
   if(res.error){alert('오류: '+res.error.message);return;}
   oid=null;load();
