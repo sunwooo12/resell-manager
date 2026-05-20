@@ -940,7 +940,10 @@ async function updateItem(id){
   }
   var res=await sb.from('items').update(updateData).eq('id',id);
   if(res.error){alert('오류: '+res.error.message);return;}
-  oid=null;load();
+  var sy=window.scrollY;
+  oid=null;
+  await load();
+  window.scrollTo(0,sy);
 }
 
 async function loadStats(){
