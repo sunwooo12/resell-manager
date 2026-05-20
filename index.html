@@ -784,10 +784,13 @@ async function addItem(){
   var note=document.getElementById('fm').value.trim();
   if(!name||!price||!date){alert('상품명, 매입가, 매입일은 필수예요!');return;}
   if(!sb){alert('설정 탭에서 Supabase 키를 먼저 입력해주세요.');return;}
-  var res=await sb.from('items').insert([{
-    name:name,size:size,source:source,buy_price:price,buy_date:date,note:note,status:document.getElementById('fst').value,
-    brand:brand,category:category,product_code:productCode,quantity:qty,sold_quantity:0,order_url:orderUrl
-  }]);
+  var status=document.getElementById('fst').value;
+  var rows=[];
+  for(var i=0;i<qty;i++){
+    rows.push({name:name,size:size,source:source,buy_price:price,buy_date:date,note:note,status:status,
+      brand:brand,category:category,product_code:productCode,quantity:1,sold_quantity:0,order_url:orderUrl});
+  }
+  var res=await sb.from('items').insert(rows);
   if(res.error){alert('등록 실패: '+res.error.message);return;}
   ['fn','fbr','fz','fpc','fp','fm','furl'].forEach(function(id){document.getElementById(id).value='';});
   document.getElementById('fq').value='1';
