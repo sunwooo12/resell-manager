@@ -417,6 +417,7 @@ function buildEditForm(it,ekey){
       '<div><div class="il">판매가 (개당)</div><input type="number" id="esp'+it.id+'" value="'+(it.sell_price||'')+'" style="'+s+'" placeholder="200000"></div>'+
       '<div><div class="il">판매일</div><input type="date" id="esd'+it.id+'" value="'+(it.sell_date||'')+'" style="'+s+'"></div>'+
       '<div><div class="il">정산금액 (합계)</div><input type="number" id="est'+it.id+'" value="'+settleVal+'" style="'+s+'" placeholder="190000"></div>'+
+      '<div><div class="il">등록 플랫폼</div><select id="epf'+it.id+'" style="'+s+'"><option value="">-</option>'+selOpts(['크림','포이즌','기타'],it.platform||'')+'</select></div>'+
       '<div style="grid-column:1/-1"><div class="il">주문내역 URL</div><input type="url" id="eurl'+it.id+'" value="'+esc(it.order_url)+'" style="'+s+'" placeholder="https://..."></div>'+
       '<div style="grid-column:1/-1"><div class="il">메모</div><input type="text" id="em'+it.id+'" value="'+esc(it.note)+'" style="'+s+'"></div>'+
     '</div>'+
@@ -683,9 +684,11 @@ async function updateItem(id){
     name:name,brand:brand,category:category,size:size,product_code:productCode,
     source:source,buy_price:price,quantity:qty,buy_date:date,note:note,order_url:orderUrl
   };
+  var platform=document.getElementById('epf'+id).value;
   if(sellPrice>0){updateData.sell_price=sellPrice;}
   if(sellDate){updateData.sell_date=sellDate;}
   if(sellPrice>0&&settle>0){updateData.fee=sellPrice*sq-settle;}
+  if(platform){updateData.platform=platform;}
   var res=await sb.from('items').update(updateData).eq('id',id);
   if(res.error){alert('오류: '+res.error.message);return;}
   oid=null;load();
