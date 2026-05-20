@@ -650,7 +650,8 @@ function card(it,batchNum,totalBatches){
   var ekey='ef'+it.id;
   var today=new Date().toISOString().split('T')[0];
   var urlBtn=it.order_url?'<a href="'+esc(it.order_url)+'" target="_blank" rel="noopener" class="btn" style="text-decoration:none;">주문확인</a>':'';
-  var acts='<button class="btn" onclick="tog(\''+ekey+'\')">수정</button>'+urlBtn;
+  var acts='<button class="btn" onclick="tog(\''+ekey+'\')">수정</button>'+urlBtn+
+    '<button class="btn" onclick="copyItem(\''+it.id+'\')">복사 등록</button>';
   var inlineForm=buildEditForm(it,ekey);
   var cancelBtn='<button class="btnC" onclick="confCancel(\''+it.id+'\')">취소/환불</button>';
   var s13='padding:7px 10px;border:1px solid #e2e0da;border-radius:8px;font-size:13px;font-family:\'Noto Sans KR\',sans-serif;background:#fff;';
@@ -872,6 +873,24 @@ async function del(id){
   var res=await sb.from('items').delete().eq('id',id);
   if(res.error){alert('오류: '+res.error.message);return;}
   load();
+}
+
+function copyItem(id){
+  var it=items.find(function(i){return String(i.id)===String(id);});
+  if(!it)return;
+  document.getElementById('fn').value=it.name||'';
+  document.getElementById('fbr').value=it.brand||'';
+  document.getElementById('fcat').value=it.category||'기타';
+  document.getElementById('fz').value=it.size||'';
+  document.getElementById('fpc').value=it.product_code||'';
+  document.getElementById('fs').value=it.source||'SSG';
+  document.getElementById('fm').value=it.note||'';
+  document.getElementById('fp').value='';
+  document.getElementById('fq').value='1';
+  document.getElementById('fd').value=new Date().toISOString().split('T')[0];
+  document.getElementById('fst').value='주문완료';
+  document.getElementById('furl').value='';
+  go(1);
 }
 
 async function updateItem(id){
