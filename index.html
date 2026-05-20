@@ -459,6 +459,7 @@ function getGroupKey(it){
 }
 
 function render(){
+  var scrollY=window.scrollY;
   var cat=document.getElementById('catFilter').value;
   var filtered=items.filter(function(i){
     if(cf!=='all'&&i.status!==cf)return false;
@@ -474,7 +475,7 @@ function render(){
     return true;
   });
   var el=document.getElementById('itemList');
-  if(!filtered.length){el.innerHTML='<div class="empty">해당하는 상품이 없어요</div>';return;}
+  if(!filtered.length){el.innerHTML='<div class="empty">해당하는 상품이 없어요</div>';window.scrollTo(0,scrollY);return;}
 
   var groupMap={},groupKeys=[];
   filtered.forEach(function(it){
@@ -524,6 +525,7 @@ function render(){
     cancelledKeys.forEach(function(k){html+=renderGroup(k);});
   }
   el.innerHTML=html;
+  window.scrollTo(0,scrollY);
   updateBundleBar();
 }
 
