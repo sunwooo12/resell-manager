@@ -108,6 +108,9 @@ button.btnC{padding:6px 14px;border-radius:8px;border:1px solid #cbd5e1;backgrou
 .dday-ok{font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px;background:#dcfce7;color:#16a34a;}
 .dday-warn{font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px;background:#fef9c3;color:#854d0e;}
 .dday-over{font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px;background:#fee2e2;color:#dc2626;}
+.search-wrap{margin-bottom:10px;}
+.search-input{width:100%;padding:9px 14px;border:1px solid #e2e0da;border-radius:8px;font-size:14px;font-family:'Noto Sans KR',sans-serif;background:#fff;outline:none;color:#1a1a1a;}
+.search-input:focus{border-color:#1a1a1a;}
 .bundle-bar{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1a1a1a;color:#fff;padding:14px 24px;border-radius:14px;display:flex;align-items:center;gap:14px;box-shadow:0 4px 24px rgba(0,0,0,0.28);z-index:100;font-size:14px;white-space:nowrap;}
 .bundle-bar button{padding:8px 18px;border-radius:8px;border:none;font-size:13px;font-family:'Noto Sans KR',sans-serif;cursor:pointer;font-weight:700;}
 .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:200;display:flex;align-items:center;justify-content:center;}
@@ -136,6 +139,9 @@ button.btnC{padding:6px 14px;border-radius:8px;border:1px solid #cbd5e1;backgrou
       <div class="stat"><div class="sl">전체 배치 수</div><div class="sv" id="h0">-</div></div>
       <div class="stat"><div class="sl">보유 중인 수량</div><div class="sv" id="h1">-</div></div>
       <div class="stat"><div class="sl">이번달 수익</div><div class="sv" id="h2">-</div></div>
+    </div>
+    <div class="search-wrap">
+      <input class="search-input" type="text" id="searchInput" placeholder="상품명, 브랜드, 상품코드, 사이즈로 검색..." oninput="searchQ=this.value;render()">
     </div>
     <div class="toolbar">
       <button class="fb on" onclick="filt('all',this)">전체</button>
@@ -284,7 +290,7 @@ ALTER TABLE items ADD COLUMN IF NOT EXISTS other_cost INT DEFAULT 0;</div>
 
 </main>
 <script>
-var sb=null,items=[],cf='all',pf='all',oid=null,expanded=new Set(),checkedItems=new Set();
+var sb=null,items=[],cf='all',pf='all',oid=null,expanded=new Set(),checkedItems=new Set(),searchQ='';
 var PLATFORMS=['크림(일반)','크림(보관)','포이즌','기타'];
 var tabs=['t0','t1','t2','t3'],secs=['s0','s1','s2','s3'];
 
@@ -458,6 +464,13 @@ function render(){
     if(cf!=='all'&&i.status!==cf)return false;
     if(cat!=='all'&&(i.category||'기타')!==cat)return false;
     if(pf!=='all'&&(i.platform||'')!==pf)return false;
+    if(searchQ){
+      var q=searchQ.trim().toLowerCase();
+      if((i.name||'').toLowerCase().indexOf(q)<0&&
+         (i.brand||'').toLowerCase().indexOf(q)<0&&
+         (i.product_code||'').toLowerCase().indexOf(q)<0&&
+         (i.size||'').toLowerCase().indexOf(q)<0)return false;
+    }
     return true;
   });
   var el=document.getElementById('itemList');
