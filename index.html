@@ -98,6 +98,8 @@ select.cfsel{padding:6px 10px;border-radius:999px;border:1px solid #e2e0da;backg
 .bFifo{background:#e0f2fe;color:#0369a1;}
 .bO{background:#ffedd5;color:#9a3412;}
 .bT{background:#ccfbf1;color:#0f766e;}
+.bI{background:#f0fdf4;color:#15803d;border:1px solid #86efac;}
+.bW{background:#fff7ed;color:#c2410c;border:1px solid #fdba74;}
 .bX{background:#e2e8f0;color:#64748b;}
 button.btnC{padding:6px 14px;border-radius:8px;border:1px solid #cbd5e1;background:none;font-size:13px;font-family:'Noto Sans KR',sans-serif;cursor:pointer;color:#64748b;}
 .card-cancelled{opacity:0.5;}
@@ -140,8 +142,9 @@ button.btnC{padding:6px 14px;border-radius:8px;border:1px solid #cbd5e1;backgrou
       <button class="fb" onclick="filt('주문완료',this)">주문완료</button>
       <button class="fb" onclick="filt('배송중',this)">배송중</button>
       <button class="fb" onclick="filt('보유중',this)">보유중</button>
-      <button class="fb" onclick="filt('등록중',this)">등록중</button>
       <button class="fb" onclick="filt('발송완료',this)">발송완료</button>
+      <button class="fb" onclick="filt('검수중',this)">검수중</button>
+      <button class="fb" onclick="filt('판매대기',this)">판매대기</button>
       <button class="fb" onclick="filt('판매완료',this)">판매완료</button>
       <button class="fb" onclick="filt('취소/환불',this)">취소/환불</button>
       <span style="width:1px;height:18px;background:#e2e0da;display:inline-block;margin:0 2px;align-self:center;"></span>
@@ -164,6 +167,11 @@ button.btnC{padding:6px 14px;border-radius:8px;border:1px solid #cbd5e1;backgrou
     <div class="modal-box">
       <div class="modal-title">묶음 발송 처리</div>
       <div id="bundleInfo" style="font-size:13px;color:#888;margin-bottom:16px;line-height:1.6;"></div>
+      <div class="modal-field"><div class="il">발송 플랫폼</div>
+        <select id="bundlePlatform" style="width:100%;padding:9px 12px;border:1px solid #e2e0da;border-radius:8px;font-size:14px;font-family:'Noto Sans KR',sans-serif;">
+          <option>크림(일반)</option><option>크림(보관)</option><option>포이즌</option>
+        </select>
+      </div>
       <div class="modal-field"><div class="il">택배비 (원)</div><input type="number" id="bundleCourier" placeholder="4000" oninput="calcBundlePreview()"></div>
       <div class="modal-field"><div class="il">박스값 (원)</div><input type="number" id="bundleBox" placeholder="1000" oninput="calcBundlePreview()"></div>
       <div id="bundleCalcInfo" style="font-size:13px;color:#16a34a;font-weight:700;margin-bottom:16px;min-height:20px;"></div>
@@ -267,6 +275,7 @@ ALTER TABLE items ADD COLUMN IF NOT EXISTS brand TEXT DEFAULT '';
 ALTER TABLE items ADD COLUMN IF NOT EXISTS product_code TEXT DEFAULT '';
 ALTER TABLE items ADD COLUMN IF NOT EXISTS order_url TEXT DEFAULT '';
 ALTER TABLE items ADD COLUMN IF NOT EXISTS storage_date DATE;
+ALTER TABLE items ADD COLUMN IF NOT EXISTS storage_start_date DATE;
 ALTER TABLE items ADD COLUMN IF NOT EXISTS shipping_cost INT DEFAULT 0;
 ALTER TABLE items ADD COLUMN IF NOT EXISTS other_cost INT DEFAULT 0;</div>
       </div>
@@ -359,12 +368,17 @@ function closeBundleModal(){document.getElementById('bundleModal').style.display
 async function confirmBundleShip(){
   var c=parseInt(document.getElementById('bundleCourier').value)||0;
   var b=parseInt(document.getElementById('bundleBox').value)||0;
+  var platform=document.getElementById('bundlePlatform').value;
+  var isStorage=platform==='크림(보관)';
   var per=Math.round((c+b)/Math.max(checkedItems.size,1));
   var ids=Array.from(checkedItems);
   for(var i=0;i<ids.length;i++){
     var it=items.find(function(x){return String(x.id)===ids[i];});
-    var cur=it?it.shipping_cost||0:0;
-    var res=await sb.from('items').update({status:'발송완료',shipping_cost:cur+per}).eq('id',ids[i]);
+    var curShip=it?it.shipping_cost||0:0;
+    var curOther=it?it.other_cost||0:0;
+    var updateData={status:'발송완료',platform:platform,shipping_cost:curShip+per};
+    if(isStorage){updateData.other_cost=curOther+3000;}
+    var res=await sb.from('items').update(updateData).eq('id',ids[i]);
     if(res.error){alert('오류: '+res.error.message);return;}
   }
   checkedItems.clear();
@@ -527,7 +541,7 @@ function buildEditForm(it,ekey){
       '<div><div class="il">판매일</div><input type="date" id="esd'+it.id+'" value="'+(it.sell_date||'')+'" style="'+s+'"></div>'+
       '<div><div class="il">정산금액 (합계)</div><input type="number" id="est'+it.id+'" value="'+settleVal+'" style="'+s+'" placeholder="190000"></div>'+
       '<div><div class="il">등록 플랫폼</div><select id="epf'+it.id+'" onchange="onPlatformChange(\'epf'+it.id+'\',\'epfsd'+it.id+'\')" style="'+s+'"><option value="">-</option>'+selOpts(PLATFORMS,it.platform||'')+'</select></div>'+
-      '<div><div class="il">상태 변경</div><select id="est2'+it.id+'" style="'+s+'">'+selOpts(['주문완료','배송중','보유중','등록중','발송완료','판매완료','취소/환불'],it.status)+'</select></div>'+
+      '<div><div class="il">상태 변경</div><select id="est2'+it.id+'" style="'+s+'">'+selOpts(['주문완료','배송중','보유중','발송완료','검수중','판매대기','판매완료','취소/환불','등록중'],it.status)+'</select></div>'+
       '<div id="epfsd'+it.id+'" style="'+(it.platform==='크림(보관)'?'':'display:none;')+'"><div class="il">입고일 (크림 창고)</div><input type="date" id="esd2'+it.id+'" value="'+(it.storage_date||'')+'" style="'+s+'"></div>'+
       '<div><div class="il">배송비 (개당)</div><input type="number" id="esc'+it.id+'" value="'+(it.shipping_cost||'')+'" style="'+s+'" placeholder="0"></div>'+
       '<div><div class="il">기타비용</div><input type="number" id="eoc'+it.id+'" value="'+(it.other_cost||'')+'" style="'+s+'" placeholder="0"></div>'+
@@ -546,6 +560,8 @@ function statusBadge(s){
   if(s==='보유중')return 'bY';
   if(s==='등록중')return 'bB';
   if(s==='발송완료')return 'bP';
+  if(s==='검수중')return 'bI';
+  if(s==='판매대기')return 'bW';
   if(s==='취소/환불')return 'bX';
   return 'bG';
 }
@@ -586,26 +602,20 @@ function card(it,batchNum,totalBatches){
       '<div><div class="ml">플랫폼</div><div class="mv">'+(it.platform||'-')+'</div></div>'+
       '<div><div class="ml">순수익</div><div class="mv '+(profit>=0?'g':'r')+'">'+(profit>=0?'+':'')+profit.toLocaleString()+'원</div></div>'+
       '<div><div class="ml">마진율</div><div class="mv '+(marginRate>=0?'g':'r')+'">'+(marginRate>=0?'+':'')+marginRate+'%</div></div>';
-  }else if(it.status==='등록중'||it.status==='발송완료'){
-    metaItems+='<div><div class="ml">등록 플랫폼</div><div class="mv">'+(it.platform||'-')+'</div></div>';
+  }else if(it.platform&&(it.status==='발송완료'||it.status==='검수중'||it.status==='판매대기'||it.status==='등록중')){
+    metaItems+='<div><div class="ml">플랫폼</div><div class="mv">'+(it.platform||'-')+'</div></div>';
   }
-  // 비용 내역
-  if(it.shipping_cost>0){
-    metaItems+='<div><div class="ml">배송비 (개당)</div><div class="mv">'+(it.shipping_cost||0).toLocaleString()+'원</div></div>';
-  }
-  if(it.other_cost>0){
-    metaItems+='<div><div class="ml">기타비용</div><div class="mv">'+(it.other_cost||0).toLocaleString()+'원</div></div>';
-  }
-  if(it.platform==='크림(보관)'&&it.storage_date){
-    var sdays=calcStorageDays(it.storage_date);
-    var sfee=calcStorageFee(it.storage_date);
+  // 창고보관비 — storage_start_date 기준 (판매대기 시작일)
+  if(it.platform==='크림(보관)'&&it.storage_start_date){
+    var sdays=calcStorageDays(it.storage_start_date);
+    var sfee=calcStorageFee(it.storage_start_date);
     metaItems+='<div><div class="ml">창고보관비</div><div class="mv '+(sfee>0?'r':'g')+'">'+
       (sfee>0?sfee.toLocaleString()+'원':'무료')+' ('+sdays+'일 경과)</div></div>'+
-      '<div><div class="ml">입고일</div><div class="mv">'+it.storage_date+'</div></div>';
+      '<div><div class="ml">판매대기 시작</div><div class="mv">'+it.storage_start_date+'</div></div>';
   }
-  if(it.note){
-    metaItems+='<div style="grid-column:1/-1"><div class="ml">메모</div><div class="mv" style="font-size:12px;">'+it.note+'</div></div>';
-  }
+  if(it.shipping_cost>0){metaItems+='<div><div class="ml">배송비</div><div class="mv">'+(it.shipping_cost).toLocaleString()+'원</div></div>';}
+  if(it.other_cost>0){metaItems+='<div><div class="ml">기타비용</div><div class="mv">'+(it.other_cost).toLocaleString()+'원</div></div>';}
+  if(it.note){metaItems+='<div style="grid-column:1/-1"><div class="ml">메모</div><div class="mv" style="font-size:12px;">'+it.note+'</div></div>';}
 
   var isExpanded=expanded.has(String(it.id));
   var isChecked=checkedItems.has(String(it.id));
@@ -613,11 +623,11 @@ function card(it,batchNum,totalBatches){
   var chkBox=canCheck?'<input type="checkbox"'+(isChecked?' checked':'')+
     ' onclick="event.stopPropagation();toggleCheck(\''+it.id+'\')" style="width:16px;height:16px;cursor:pointer;flex-shrink:0;margin-right:4px;" />':'';
 
-  // D-day 배지 (크림 보관)
+  // D-day 배지 — 판매대기 기준 (storage_start_date)
   var storageBadge='';
-  if(it.platform==='크림(보관)'&&it.storage_date){
-    var dd=30-calcStorageDays(it.storage_date);
-    var sf=calcStorageFee(it.storage_date);
+  if(it.platform==='크림(보관)'&&it.storage_start_date&&(it.status==='판매대기'||it.status==='판매완료')){
+    var dd=30-calcStorageDays(it.storage_start_date);
+    var sf=calcStorageFee(it.storage_start_date);
     if(dd>0){storageBadge='<span class="'+(dd>10?'dday-ok':'dday-warn')+'">D-'+dd+'</span>';}
     else{storageBadge='<span class="dday-over">D+'+(Math.abs(dd))+' '+sf.toLocaleString()+'원</span>';}
   }
@@ -625,48 +635,73 @@ function card(it,batchNum,totalBatches){
   var chevron='<span style="color:#bbb;font-size:10px;margin-left:6px;">'+(isExpanded?'▲':'▼')+'</span>';
 
   var ekey='ef'+it.id;
+  var today=new Date().toISOString().split('T')[0];
   var urlBtn=it.order_url?'<a href="'+esc(it.order_url)+'" target="_blank" rel="noopener" class="btn" style="text-decoration:none;">주문확인</a>':'';
   var acts='<button class="btn" onclick="tog(\''+ekey+'\')">수정</button>'+urlBtn;
   var inlineForm=buildEditForm(it,ekey);
   var cancelBtn='<button class="btnC" onclick="confCancel(\''+it.id+'\')">취소/환불</button>';
   var s13='padding:7px 10px;border:1px solid #e2e0da;border-radius:8px;font-size:13px;font-family:\'Noto Sans KR\',sans-serif;background:#fff;';
+
+  // 판매 확정 인라인 폼 (공통)
+  var sellKey='sf'+it.id;
+  var sellForm='<div class="inf'+(oid===sellKey?' on':'')+'" id="'+sellKey+'">'+
+    '<div class="ig">'+
+    '<div><div class="il">판매 수량 (최대 '+remain+'개)</div><input type="number" id="sq'+it.id+'" value="'+remain+'" min="1" max="'+remain+'" oninput="calcSell(\''+it.id+'\','+it.buy_price+')"></div>'+
+    '<div><div class="il">판매가 (원, 개당)</div><input type="number" id="sp'+it.id+'" placeholder="200000" oninput="calcSell(\''+it.id+'\','+it.buy_price+')"></div>'+
+    '<div><div class="il">정산금액 (원, 합계)</div><input type="number" id="st'+it.id+'" placeholder="190000" oninput="calcSell(\''+it.id+'\','+it.buy_price+')"></div>'+
+    '<div><div class="il">판매일</div><input type="date" id="sd'+it.id+'" value="'+today+'"></div>'+
+    '</div>'+
+    '<div id="calc'+it.id+'" style="display:none;gap:20px;align-items:center;background:#f8f9fa;border-radius:8px;padding:12px 16px;margin-bottom:12px;"></div>'+
+    '<button class="btnP" onclick="confSell(\''+it.id+'\','+remain+')">판매 확정</button></div>';
+
   if(it.status==='주문완료'){
     acts+='<button class="btn" onclick="confDeliver(\''+it.id+'\')">배송 확인</button>'+
           cancelBtn+'<button class="btnD" onclick="del(\''+it.id+'\')">삭제</button>';
   }else if(it.status==='배송중'){
     acts+='<button class="btnP" onclick="confReceive(\''+it.id+'\')">입고 확인</button>'+
           cancelBtn+'<button class="btnD" onclick="del(\''+it.id+'\')">삭제</button>';
-  }else if(it.status==='보유중'){
-    acts+='<button class="btnP" onclick="tog(\'lf'+it.id+'\')">플랫폼 등록</button>'+
+  }else if(it.status==='보유중'||it.status==='등록중'){
+    // 발송 처리 폼 (플랫폼 선택 포함)
+    var shipKey='lf'+it.id;
+    acts+='<button class="btnP" onclick="tog(\''+shipKey+'\')">발송 처리</button>'+
           cancelBtn+'<button class="btnD" onclick="del(\''+it.id+'\')">삭제</button>';
-    inlineForm+='<div class="inf'+(oid==='lf'+it.id?' on':'')+'" id="lf'+it.id+'">'+
-      '<div class="il" style="margin-bottom:6px;">등록 플랫폼</div>'+
-      '<select id="lp'+it.id+'" onchange="onPlatformChange(\'lp'+it.id+'\',\'lsd'+it.id+'\')" style="'+s13+'width:200px;margin-bottom:10px;">'+
-        '<option>크림(일반)</option><option>크림(보관)</option><option>포이즌</option><option>기타</option>'+
-      '</select>'+
-      '<div id="lsd'+it.id+'" style="display:none;margin-bottom:10px;">'+
-        '<div class="il" style="margin-bottom:4px;">입고일 (크림 창고)</div>'+
-        '<input type="date" id="lpsd'+it.id+'" value="'+new Date().toISOString().split('T')[0]+'" style="'+s13+'width:200px;">'+
-      '</div><br>'+
-      '<button class="btnP" onclick="confList(\''+it.id+'\')">등록 확정</button></div>';
-  }else if(it.status==='등록중'){
-    acts+='<button class="btnV" onclick="confShip(\''+it.id+'\')">발송 처리</button>'+
-          cancelBtn+'<button class="btnD" onclick="del(\''+it.id+'\')">삭제</button>';
-  }else if(it.status==='발송완료'||(it.status==='판매완료'&&remain>0)){
-    var btnLabel=it.status==='발송완료'?'판매 확정':'추가 판매';
-    var fkey='sf'+it.id;
-    acts+='<button class="btnP" onclick="tog(\''+fkey+'\')">'+btnLabel+'</button>'+
-          '<button class="btnD" onclick="del(\''+it.id+'\')">삭제</button>';
-    inlineForm+='<div class="inf'+(oid===fkey?' on':'')+'" id="'+fkey+'">'+
-      '<div class="ig">'+
-      '<div><div class="il">판매 수량 (최대 '+remain+'개)</div><input type="number" id="sq'+it.id+'" value="'+remain+'" min="1" max="'+remain+'" oninput="calcSell(\''+it.id+'\','+it.buy_price+')"></div>'+
-      '<div><div class="il">판매가 (원, 개당)</div><input type="number" id="sp'+it.id+'" placeholder="200000" oninput="calcSell(\''+it.id+'\','+it.buy_price+')"></div>'+
-      '<div><div class="il">정산금액 (원, 합계)</div><input type="number" id="st'+it.id+'" placeholder="190000" oninput="calcSell(\''+it.id+'\','+it.buy_price+')"></div>'+
-      '<div><div class="il">판매일</div><input type="date" id="sd'+it.id+'" value="'+new Date().toISOString().split('T')[0]+'"></div>'+
+    inlineForm+='<div class="inf'+(oid===shipKey?' on':'')+'" id="'+shipKey+'">'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">'+
+        '<div><div class="il" style="margin-bottom:4px;">발송 플랫폼</div>'+
+          '<select id="lp'+it.id+'" style="'+s13+'">'+
+            '<option>크림(일반)</option><option>크림(보관)</option><option>포이즌</option>'+
+          '</select></div>'+
+        '<div><div class="il" style="margin-bottom:4px;">택배비 (원)</div>'+
+          '<input type="number" id="lship'+it.id+'" placeholder="0" style="'+s13+'"></div>'+
       '</div>'+
-      '<div id="calc'+it.id+'" style="display:none;gap:20px;align-items:center;background:#f8f9fa;border-radius:8px;padding:12px 16px;margin-bottom:12px;"></div>'+
-      '<button class="btnP" onclick="confSell(\''+it.id+'\','+remain+')">판매 확정</button></div>';
+      '<button class="btnP" onclick="confShipWithPlatform(\''+it.id+'\')">발송 확정</button></div>';
+  }else if(it.status==='발송완료'){
+    if(it.platform==='크림(보관)'){
+      acts+='<button class="btnV" onclick="confInspect(\''+it.id+'\')">검수 완료</button>'+
+            '<button class="btnD" onclick="del(\''+it.id+'\')">삭제</button>';
+    }else{
+      acts+='<button class="btnP" onclick="tog(\''+sellKey+'\')">판매 확정</button>'+
+            '<button class="btnD" onclick="del(\''+it.id+'\')">삭제</button>';
+      inlineForm+=sellForm;
+    }
+  }else if(it.status==='검수중'){
+    acts+='<button class="btnP" onclick="confWait(\''+it.id+'\')">판매대기 등록</button>'+
+          '<button class="btnD" onclick="del(\''+it.id+'\')">삭제</button>';
+  }else if(it.status==='판매대기'){
+    acts+='<button class="btnP" onclick="tog(\''+sellKey+'\')">판매 확정</button>'+
+          '<button class="btnD" onclick="del(\''+it.id+'\')">삭제</button>';
+    inlineForm+=sellForm;
+  }else if(it.status==='판매완료'&&remain>0){
+    acts+='<button class="btnP" onclick="tog(\''+sellKey+'\')">추가 판매</button>';
+    if(it.platform==='크림(보관)'){
+      acts+='<button class="btn" onclick="confRefundDeposit(\''+it.id+'\')">보증금 환불</button>';
+    }
+    acts+='<button class="btnD" onclick="del(\''+it.id+'\')">삭제</button>';
+    inlineForm+=sellForm;
   }else{
+    if(it.status==='판매완료'&&it.platform==='크림(보관)'){
+      acts+='<button class="btn" onclick="confRefundDeposit(\''+it.id+'\')">보증금 환불</button>';
+    }
     acts+='<button class="btnD" onclick="del(\''+it.id+'\')">삭제</button>';
   }
 
@@ -744,12 +779,38 @@ async function addItem(){
   go(0);
 }
 
-async function confList(id){
+async function confShipWithPlatform(id){
   var platform=document.getElementById('lp'+id).value;
-  var storageDate=platform==='크림(보관)'?(document.getElementById('lpsd'+id)||{}).value||null:null;
-  var res=await sb.from('items').update({status:'등록중',platform:platform,storage_date:storageDate}).eq('id',id);
+  var shipCost=parseInt(document.getElementById('lship'+id).value)||0;
+  var item=items.find(function(i){return i.id==id;});
+  var isStorage=platform==='크림(보관)';
+  var updateData={status:'발송완료',platform:platform,shipping_cost:(item.shipping_cost||0)+shipCost};
+  if(isStorage){updateData.other_cost=(item.other_cost||0)+3000;}  // 보증금 3,000원 자동 추가
+  var res=await sb.from('items').update(updateData).eq('id',id);
   if(res.error){alert('오류: '+res.error.message);return;}
   oid=null;load();
+}
+
+async function confInspect(id){
+  var res=await sb.from('items').update({status:'검수중'}).eq('id',id);
+  if(res.error){alert('오류: '+res.error.message);return;}
+  load();
+}
+
+async function confWait(id){
+  var today=new Date().toISOString().split('T')[0];
+  var res=await sb.from('items').update({status:'판매대기',storage_start_date:today}).eq('id',id);
+  if(res.error){alert('오류: '+res.error.message);return;}
+  load();
+}
+
+async function confRefundDeposit(id){
+  if(!confirm('보증금 3,000원이 환불되었나요?'))return;
+  var item=items.find(function(i){return i.id==id;});
+  var newCost=Math.max(0,(item.other_cost||0)-3000);
+  var res=await sb.from('items').update({other_cost:newCost}).eq('id',id);
+  if(res.error){alert('오류: '+res.error.message);return;}
+  load();
 }
 
 async function confDeliver(id){
@@ -771,11 +832,6 @@ async function confCancel(id){
   load();
 }
 
-async function confShip(id){
-  var res=await sb.from('items').update({status:'발송완료'}).eq('id',id);
-  if(res.error){alert('오류: '+res.error.message);return;}
-  load();
-}
 
 async function confSell(id,maxRemain){
   var sellQty=parseInt(document.getElementById('sq'+id).value)||maxRemain;
@@ -889,8 +945,8 @@ async function loadStats(){
   document.getElementById('p9').textContent=its.filter(function(i){return i.status==='판매완료';}).length+'개';
 
   // 비용 통계
-  var totalStorage=its.filter(function(i){return i.platform==='크림(보관)'&&i.storage_date;})
-    .reduce(function(s,i){return s+calcStorageFee(i.storage_date);},0);
+  var totalStorage=its.filter(function(i){return i.platform==='크림(보관)'&&i.storage_start_date;})
+    .reduce(function(s,i){return s+calcStorageFee(i.storage_start_date);},0);
   var totalShipping=its.reduce(function(s,i){return s+(i.shipping_cost||0);},0);
   var totalOther=its.reduce(function(s,i){return s+(i.other_cost||0);},0);
   var realProfit=tp-totalStorage-totalShipping-totalOther;
