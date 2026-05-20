@@ -133,6 +133,9 @@ button.btnC{padding:6px 14px;border-radius:8px;border:1px solid #cbd5e1;backgrou
       <button class="fb" onclick="filt('발송완료',this)">발송완료</button>
       <button class="fb" onclick="filt('판매완료',this)">판매완료</button>
       <button class="fb" onclick="filt('취소/환불',this)">취소/환불</button>
+      <span style="width:1px;height:18px;background:#e2e0da;display:inline-block;margin:0 2px;align-self:center;"></span>
+      <button class="fb pfb" onclick="filtPlat('크림',this)">크림</button>
+      <button class="fb pfb" onclick="filtPlat('포이즌',this)">포이즌</button>
       <select class="cfsel" id="catFilter" onchange="render()">
         <option value="all">전체 카테고리</option>
         <option>신발</option><option>의류</option><option>잡화</option><option>액세서리</option><option>기타</option>
@@ -235,7 +238,7 @@ ALTER TABLE items ADD COLUMN IF NOT EXISTS order_url TEXT DEFAULT '';</div>
 
 </main>
 <script>
-var sb=null,items=[],cf='all',oid=null;
+var sb=null,items=[],cf='all',pf='all',oid=null,expanded=new Set();
 var tabs=['t0','t1','t2','t3'],secs=['s0','s1','s2','s3'];
 
 function go(i){
@@ -270,8 +273,29 @@ function init(){
 
 function filt(f,btn){
   cf=f;
-  document.querySelectorAll('.fb').forEach(function(b){b.classList.remove('on');});
+  document.querySelectorAll('.fb:not(.pfb)').forEach(function(b){b.classList.remove('on');});
   btn.classList.add('on');
+  render();
+}
+
+function filtPlat(p,btn){
+  if(pf===p){pf='all';btn.classList.remove('on');}
+  else{
+    pf=p;
+    document.querySelectorAll('.pfb').forEach(function(b){b.classList.remove('on');});
+    btn.classList.add('on');
+  }
+  render();
+}
+
+function toggleCard(id){
+  var sid=String(id);
+  if(expanded.has(sid)){
+    expanded.delete(sid);
+    if(oid&&(oid==='ef'+id||oid==='lf'+id||oid==='sf'+id))oid=null;
+  }else{
+    expanded.add(sid);
+  }
   render();
 }
 
@@ -311,6 +335,7 @@ function render(){
   var filtered=items.filter(function(i){
     if(cf!=='all'&&i.status!==cf)return false;
     if(cat!=='all'&&(i.category||'기타')!==cat)return false;
+    if(pf!=='all'&&(i.platform||'')!==pf)return false;
     return true;
   });
   var el=document.getElementById('itemList');
@@ -341,21 +366,16 @@ function render(){
 
   function renderGroup(k){
     var grp=groupMap[k];
-    if(grp.length===1)return card(grp[0],1,1);
     var rep=grp[0];
     var totalQty=grp.reduce(function(s,i){return s+(i.quantity||1);},0);
     var totalSold=grp.reduce(function(s,i){return s+(i.sold_quantity||0);},0);
-    var byCode=(rep.product_code||'').trim();
-    var groupLabel=byCode?rep.product_code.trim():'상품명+사이즈 묶음';
+    var hdrName=(rep.brand?rep.brand+' ':'')+rep.name+(rep.size?' '+rep.size:'');
     return '<div class="group-wrap">'+
       '<div class="group-hdr">'+
-        '<div style="display:flex;align-items:center;gap:8px;">'+
-          '<span class="group-hdr-name">'+(rep.brand?rep.brand+' ':'')+rep.name+(rep.size?' '+rep.size:'')+'</span>'+
-          '<span class="group-code-badge">'+groupLabel+'</span>'+
-        '</div>'+
-        '<div style="display:flex;align-items:center;gap:10px;font-size:12px;color:#888;">'+
-          '<span>합계 '+totalQty+'개 · 판매 '+totalSold+'개</span>'+
-          '<span class="group-fifo-badge">FIFO '+grp.length+'배치</span>'+
+        '<span class="group-hdr-name">'+hdrName+'</span>'+
+        '<div style="display:flex;align-items:center;gap:12px;font-size:12px;color:#888;">'+
+          '<span>전체 <b style="color:#374151;">'+totalQty+'</b>개</span>'+
+          '<span>판매완료 <b style="color:#374151;">'+totalSold+'</b>개</span>'+
         '</div>'+
       '</div>'+
       grp.map(function(it,idx){return card(it,idx+1,grp.length);}).join('')+
@@ -381,6 +401,8 @@ function buildEditForm(it,ekey){
   var cats=['신발','의류','잡화','액세서리','기타'];
   var sources=['SSG','무신사','네이버','오프라인','기타'];
   var s='padding:7px 10px;border:1px solid #e2e0da;border-radius:8px;font-size:13px;width:100%;font-family:\'Noto Sans KR\',sans-serif;background:#fff;';
+  var sq=it.sold_quantity||0;
+  var settleVal=it.sell_price&&sq>0?it.sell_price*sq-(it.fee||0):'';
   return '<div class="inf'+(oid===ekey?' on':'')+'" id="'+ekey+'">'+
     '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px;">'+
       '<div style="grid-column:1/-1"><div class="il">상품명</div><input type="text" id="en'+it.id+'" value="'+esc(it.name)+'" style="'+s+'"></div>'+
@@ -392,6 +414,9 @@ function buildEditForm(it,ekey){
       '<div><div class="il">매입가 (개당)</div><input type="number" id="ep'+it.id+'" value="'+(it.buy_price||'')+'" style="'+s+'"></div>'+
       '<div><div class="il">수량</div><input type="number" id="eq'+it.id+'" value="'+(it.quantity||1)+'" min="'+(it.sold_quantity||0)+'" style="'+s+'"></div>'+
       '<div><div class="il">매입일</div><input type="date" id="ed'+it.id+'" value="'+(it.buy_date||'')+'" style="'+s+'"></div>'+
+      '<div><div class="il">판매가 (개당)</div><input type="number" id="esp'+it.id+'" value="'+(it.sell_price||'')+'" style="'+s+'" placeholder="200000"></div>'+
+      '<div><div class="il">판매일</div><input type="date" id="esd'+it.id+'" value="'+(it.sell_date||'')+'" style="'+s+'"></div>'+
+      '<div><div class="il">정산금액 (합계)</div><input type="number" id="est'+it.id+'" value="'+settleVal+'" style="'+s+'" placeholder="190000"></div>'+
       '<div style="grid-column:1/-1"><div class="il">주문내역 URL</div><input type="url" id="eurl'+it.id+'" value="'+esc(it.order_url)+'" style="'+s+'" placeholder="https://..."></div>'+
       '<div style="grid-column:1/-1"><div class="il">메모</div><input type="text" id="em'+it.id+'" value="'+esc(it.note)+'" style="'+s+'"></div>'+
     '</div>'+
@@ -489,7 +514,7 @@ function card(it,batchNum,totalBatches){
       '<div class="ig">'+
       '<div><div class="il">판매 수량 (최대 '+remain+'개)</div><input type="number" id="sq'+it.id+'" value="'+remain+'" min="1" max="'+remain+'" oninput="calcSell(\''+it.id+'\','+it.buy_price+')"></div>'+
       '<div><div class="il">판매가 (원, 개당)</div><input type="number" id="sp'+it.id+'" placeholder="200000" oninput="calcSell(\''+it.id+'\','+it.buy_price+')"></div>'+
-      '<div><div class="il">수수료 (원, 합계)</div><input type="number" id="fe'+it.id+'" placeholder="10000" oninput="calcSell(\''+it.id+'\','+it.buy_price+')"></div>'+
+      '<div><div class="il">정산금액 (원, 합계)</div><input type="number" id="st'+it.id+'" placeholder="190000" oninput="calcSell(\''+it.id+'\','+it.buy_price+')"></div>'+
       '<div><div class="il">판매일</div><input type="date" id="sd'+it.id+'" value="'+new Date().toISOString().split('T')[0]+'"></div>'+
       '</div>'+
       '<div id="calc'+it.id+'" style="display:none;gap:20px;align-items:center;background:#f8f9fa;border-radius:8px;padding:12px 16px;margin-bottom:12px;"></div>'+
@@ -498,44 +523,54 @@ function card(it,batchNum,totalBatches){
     acts+='<button class="btnD" onclick="del(\''+it.id+'\')">삭제</button>';
   }
 
+  var isExpanded=expanded.has(String(it.id));
+  var chevron='<span style="color:#bbb;font-size:10px;margin-left:6px;">'+(isExpanded?'▲':'▼')+'</span>';
+
   return '<div class="'+(isGrouped?'group-card':'card')+(it.status==='취소/환불'?' card-cancelled':'')+'">'+
-    '<div class="ctop">'+
+    '<div class="ctop" onclick="toggleCard(\''+it.id+'\')" style="cursor:pointer;user-select:none;">'+
       '<div style="flex:1">'+
         '<div class="cn">'+titleHtml+'</div>'+
-        '<div class="cs">'+(it.source||'')+(it.buy_date?' · 매입 '+it.buy_date:'')+'</div>'+
-        codeTxt+
+        (it.size?'<div class="cs">'+it.size+'</div>':'')+
       '</div>'+
       '<div class="badges">'+
         fifoBadge+
-        '<span class="badge bCat">'+cat+'</span>'+
         '<span class="badge '+bc+'">'+it.status+'</span>'+
+        chevron+
       '</div>'+
     '</div>'+
-    qtyHtml+
-    '<div class="meta">'+metaItems+'</div>'+
-    '<div class="acts">'+acts+'</div>'+
-    inlineForm+
+    (isExpanded?
+      '<div style="padding-top:2px;">'+
+        '<div class="cs" style="padding:0 0 8px;">'+(it.source||'')+(it.buy_date?' · 매입 '+it.buy_date:'')+(it.product_code?' · '+it.product_code:'')+'</div>'+
+        qtyHtml+
+        '<div class="meta">'+metaItems+'</div>'+
+        '<div class="acts">'+acts+'</div>'+
+        inlineForm+
+      '</div>'
+    :'')+
     '</div>';
 }
 
-function tog(key){oid=oid===key?null:key;render();}
+function tog(key){
+  oid=oid===key?null:key;
+  if(oid){var m=key.match(/^[els]f(.+)$/);if(m)expanded.add(m[1]);}
+  render();
+}
 
 function calcSell(id,buyPrice){
   var qty=parseInt(document.getElementById('sq'+id).value)||1;
   var sp=parseInt(document.getElementById('sp'+id).value)||0;
-  var fee=parseInt(document.getElementById('fe'+id).value)||0;
+  var st=parseInt(document.getElementById('st'+id).value)||0;
   var el=document.getElementById('calc'+id);
   if(!el)return;
-  if(!sp){el.style.display='none';return;}
-  var settle=sp*qty-fee;
+  if(!st){el.style.display='none';return;}
+  var fee=sp>0?sp*qty-st:0;
   var cost=buyPrice*qty;
-  var margin=settle-cost;
+  var margin=st-cost;
   var rate=cost>0?Math.round(margin/cost*100):0;
   var gc=margin>=0?'#16a34a':'#dc2626';
   el.style.display='flex';
   el.innerHTML=
-    '<div><div style="font-size:11px;color:#888;margin-bottom:3px;">정산금액</div><div style="font-size:14px;font-weight:700;">'+settle.toLocaleString()+'원</div></div>'+
-    '<div style="width:1px;background:#e2e0da;"></div>'+
+    (sp>0?'<div><div style="font-size:11px;color:#888;margin-bottom:3px;">수수료</div><div style="font-size:14px;font-weight:700;color:#888;">'+fee.toLocaleString()+'원</div></div><div style="width:1px;background:#e2e0da;"></div>':'')+
     '<div><div style="font-size:11px;color:#888;margin-bottom:3px;">마진</div><div style="font-size:14px;font-weight:700;color:'+gc+';">'+(margin>=0?'+':'')+margin.toLocaleString()+'원</div></div>'+
     '<div style="width:1px;background:#e2e0da;"></div>'+
     '<div><div style="font-size:11px;color:#888;margin-bottom:3px;">마진율</div><div style="font-size:14px;font-weight:700;color:'+gc+';">'+(rate>=0?'+':'')+rate+'%</div></div>';
@@ -601,7 +636,8 @@ async function confShip(id){
 async function confSell(id,maxRemain){
   var sellQty=parseInt(document.getElementById('sq'+id).value)||maxRemain;
   var sp=parseInt(document.getElementById('sp'+id).value);
-  var fee=parseInt(document.getElementById('fe'+id).value)||0;
+  var st=parseInt(document.getElementById('st'+id).value)||0;
+  var fee=st>0?(sp*sellQty-st):0;
   var sd=document.getElementById('sd'+id).value;
   if(!sp||!sd){alert('판매가와 판매일을 입력해주세요.');return;}
   if(sellQty<1||sellQty>maxRemain){alert('판매 수량을 확인해주세요.');return;}
@@ -636,12 +672,21 @@ async function updateItem(id){
   var qty=parseInt(document.getElementById('eq'+id).value)||1;
   var date=document.getElementById('ed'+id).value;
   var note=document.getElementById('em'+id).value.trim();
-  if(!name||!price||!date){alert('상품명, 매입가, 매입일은 필수예요!');return;}
   var orderUrl=document.getElementById('eurl'+id).value.trim();
-  var res=await sb.from('items').update({
+  var sellPrice=parseInt(document.getElementById('esp'+id).value)||0;
+  var sellDate=document.getElementById('esd'+id).value;
+  var settle=parseInt(document.getElementById('est'+id).value)||0;
+  if(!name||!price||!date){alert('상품명, 매입가, 매입일은 필수예요!');return;}
+  var item=items.find(function(i){return i.id==id;});
+  var sq=item?item.sold_quantity||0:0;
+  var updateData={
     name:name,brand:brand,category:category,size:size,product_code:productCode,
     source:source,buy_price:price,quantity:qty,buy_date:date,note:note,order_url:orderUrl
-  }).eq('id',id);
+  };
+  if(sellPrice>0){updateData.sell_price=sellPrice;}
+  if(sellDate){updateData.sell_date=sellDate;}
+  if(sellPrice>0&&settle>0){updateData.fee=sellPrice*sq-settle;}
+  var res=await sb.from('items').update(updateData).eq('id',id);
   if(res.error){alert('오류: '+res.error.message);return;}
   oid=null;load();
 }
