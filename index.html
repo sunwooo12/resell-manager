@@ -418,6 +418,7 @@ function buildEditForm(it,ekey){
       '<div><div class="il">판매일</div><input type="date" id="esd'+it.id+'" value="'+(it.sell_date||'')+'" style="'+s+'"></div>'+
       '<div><div class="il">정산금액 (합계)</div><input type="number" id="est'+it.id+'" value="'+settleVal+'" style="'+s+'" placeholder="190000"></div>'+
       '<div><div class="il">등록 플랫폼</div><select id="epf'+it.id+'" style="'+s+'"><option value="">-</option>'+selOpts(['크림','포이즌','기타'],it.platform||'')+'</select></div>'+
+      '<div><div class="il">상태 변경</div><select id="est2'+it.id+'" style="'+s+'">'+selOpts(['주문완료','배송중','보유중','등록중','발송완료','판매완료','취소/환불'],it.status)+'</select></div>'+
       '<div style="grid-column:1/-1"><div class="il">주문내역 URL</div><input type="url" id="eurl'+it.id+'" value="'+esc(it.order_url)+'" style="'+s+'" placeholder="https://..."></div>'+
       '<div style="grid-column:1/-1"><div class="il">메모</div><input type="text" id="em'+it.id+'" value="'+esc(it.note)+'" style="'+s+'"></div>'+
     '</div>'+
@@ -691,6 +692,8 @@ async function updateItem(id){
   if(sellDate){updateData.sell_date=sellDate;}
   if(sellPrice>0&&settle>0){updateData.fee=sellPrice*sq-settle;}
   if(platform){updateData.platform=platform;}
+  var newStatus=document.getElementById('est2'+id).value;
+  if(newStatus){updateData.status=newStatus;}
   var res=await sb.from('items').update(updateData).eq('id',id);
   if(res.error){alert('오류: '+res.error.message);return;}
   oid=null;load();
