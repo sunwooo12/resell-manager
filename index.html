@@ -341,13 +341,41 @@ function toggleCheck(id){
   if(checkedItems.has(sid))checkedItems.delete(sid);else checkedItems.add(sid);
   updateBundleBar();
 }
+function toggleGroupItems(idStr,checked){
+  idStr.split(',').forEach(function(id){
+    if(checked)checkedItems.add(id);else checkedItems.delete(id);
+  });
+  render();
+}
+async function bulkUpdateStatus(){
+  var sel=document.getElementById('bulkStatusSel');
+  if(!sel||!sel.value){alert('변경할 상태를 선택해주세요.');return;}
+  var status=sel.value;
+  var ids=Array.from(checkedItems);
+  if(!ids.length)return;
+  if(!confirm(ids.length+'개 항목을 "'+status+'"으로 변경하시겠어요?'))return;
+  var sy=window.scrollY;
+  for(var i=0;i<ids.length;i++){
+    var res=await sb.from('items').update({status:status}).eq('id',ids[i]);
+    if(res.error){alert('오류: '+res.error.message);return;}
+  }
+  checkedItems.clear();
+  await load();
+  window.scrollTo(0,sy);
+}
 function updateBundleBar(){
   var el=document.getElementById('bundleBarWrap');
   if(!el)return;
   if(checkedItems.size>0){
+    var opts=['주문완료','배송중','보유중','발송완료','검수중','판매대기','판매완료','취소/환불'];
     el.innerHTML='<div class="bundle-bar"><span>'+checkedItems.size+'개 선택됨</span>'+
       '<button style="background:#3b82f6;color:#fff;" onclick="bundleShip()">묶음 발송</button>'+
-      '<button style="background:#555;color:#fff;" onclick="checkedItems.clear();updateBundleBar()">선택 해제</button></div>';
+      '<select id="bulkStatusSel" style="padding:6px 10px;border-radius:8px;border:none;font-size:13px;font-family:\'Noto Sans KR\',sans-serif;background:#333;color:#fff;cursor:pointer;">'+
+        '<option value="">상태 선택</option>'+
+        opts.map(function(s){return '<option>'+s+'</option>';}).join('')+
+      '</select>'+
+      '<button style="background:#16a34a;color:#fff;" onclick="bulkUpdateStatus()">변경</button>'+
+      '<button style="background:#555;color:#fff;" onclick="checkedItems.clear();render()">선택 해제</button></div>';
   }else{el.innerHTML='';}
 }
 function bundleShip(){
@@ -506,8 +534,12 @@ function render(){
     var totalQty=grp.reduce(function(s,i){return s+(i.quantity||1);},0);
     var totalSold=grp.reduce(function(s,i){return s+(i.sold_quantity||0);},0);
     var hdrName=(rep.brand?rep.brand+' ':'')+rep.name+(rep.size?' '+rep.size:'');
+    var grpIdStr=grp.map(function(i){return i.id;}).join(',');
+    var allChecked=grp.every(function(i){return checkedItems.has(String(i.id));});
     return '<div class="group-wrap">'+
       '<div class="group-hdr">'+
+        '<input type="checkbox"'+(allChecked?' checked':'')+
+          ' onclick="toggleGroupItems(\''+grpIdStr+'\',this.checked)" style="width:16px;height:16px;cursor:pointer;flex-shrink:0;margin-right:10px;">'+
         '<span class="group-hdr-name">'+hdrName+'</span>'+
         '<div style="display:flex;align-items:center;gap:12px;font-size:12px;color:#888;">'+
           '<span>전체 <b style="color:#374151;">'+totalQty+'</b>개</span>'+
@@ -634,9 +666,8 @@ function card(it,batchNum,totalBatches){
 
   var isExpanded=expanded.has(String(it.id));
   var isChecked=checkedItems.has(String(it.id));
-  var canCheck=(it.status==='보유중'||it.status==='등록중');
-  var chkBox=canCheck?'<input type="checkbox"'+(isChecked?' checked':'')+
-    ' onclick="event.stopPropagation();toggleCheck(\''+it.id+'\')" style="width:16px;height:16px;cursor:pointer;flex-shrink:0;margin-right:4px;" />':'';
+  var chkBox='<input type="checkbox"'+(isChecked?' checked':'')+
+    ' onclick="event.stopPropagation();toggleCheck(\''+it.id+'\')" style="width:16px;height:16px;cursor:pointer;flex-shrink:0;margin-right:4px;" />';
 
   // D-day 배지 — 판매대기 기준 (storage_start_date)
   var storageBadge='';
@@ -723,7 +754,7 @@ function card(it,batchNum,totalBatches){
 
   return '<div class="'+(isGrouped?'group-card':'card')+(it.status==='취소/환불'?' card-cancelled':'')+'">'+
     '<div class="ctop" onclick="toggleCard(\''+it.id+'\')" style="cursor:pointer;user-select:none;">'+
-      (canCheck?chkBox:'')+
+      chkBox+
       '<div style="flex:1">'+
         '<div class="cn">'+titleHtml+'</div>'+
         '<div class="cs">'+
