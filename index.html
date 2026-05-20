@@ -96,6 +96,13 @@ select.cfsel{padding:6px 10px;border-radius:999px;border:1px solid #e2e0da;backg
 .group-fifo-badge{font-size:11px;color:#16a34a;background:#dcfce7;padding:2px 8px;border-radius:999px;font-weight:700;}
 .group-card{background:#fff;padding:18px 20px;border-top:1px solid #f0f0ec;}
 .bFifo{background:#e0f2fe;color:#0369a1;}
+.bO{background:#ffedd5;color:#9a3412;}
+.bT{background:#ccfbf1;color:#0f766e;}
+.bX{background:#e2e8f0;color:#64748b;}
+button.btnC{padding:6px 14px;border-radius:8px;border:1px solid #cbd5e1;background:none;font-size:13px;font-family:'Noto Sans KR',sans-serif;cursor:pointer;color:#64748b;}
+.card-cancelled{opacity:0.5;}
+.cancel-divider{color:#aaa;font-size:12px;padding:10px 0 4px;display:flex;align-items:center;gap:10px;}
+.cancel-divider::before,.cancel-divider::after{content:'';flex:1;height:1px;background:#e2e0da;}
 </style>
 </head>
 <body>
@@ -119,10 +126,13 @@ select.cfsel{padding:6px 10px;border-radius:999px;border:1px solid #e2e0da;backg
     </div>
     <div class="toolbar">
       <button class="fb on" onclick="filt('all',this)">전체</button>
+      <button class="fb" onclick="filt('주문완료',this)">주문완료</button>
+      <button class="fb" onclick="filt('배송중',this)">배송중</button>
       <button class="fb" onclick="filt('보유중',this)">보유중</button>
       <button class="fb" onclick="filt('등록중',this)">등록중</button>
       <button class="fb" onclick="filt('발송완료',this)">발송완료</button>
       <button class="fb" onclick="filt('판매완료',this)">판매완료</button>
+      <button class="fb" onclick="filt('취소/환불',this)">취소/환불</button>
       <select class="cfsel" id="catFilter" onchange="render()">
         <option value="all">전체 카테고리</option>
         <option>신발</option><option>의류</option><option>잡화</option><option>액세서리</option><option>기타</option>
@@ -150,6 +160,13 @@ select.cfsel{padding:6px 10px;border-radius:999px;border:1px solid #e2e0da;backg
         <div><label>매입처</label>
           <select id="fs">
             <option>SSG</option><option>무신사</option><option>네이버</option><option>오프라인</option><option>기타</option>
+          </select>
+        </div>
+        <div><label>매입 상태</label>
+          <select id="fst">
+            <option value="주문완료">주문완료 (방금 주문)</option>
+            <option value="배송중">배송중</option>
+            <option value="보유중">보유중 (수령 완료)</option>
           </select>
         </div>
         <div><label>매입가 (원, 개당) *</label><input type="number" id="fp" placeholder="150000"/></div>
@@ -316,32 +333,41 @@ function render(){
     return (groupMap[a][0].buy_date||'').localeCompare(groupMap[b][0].buy_date||'');
   });
 
-  var html='';
+  var activeKeys=[],cancelledKeys=[];
   groupKeys.forEach(function(k){
-    var grp=groupMap[k];
-    if(grp.length===1){
-      html+=card(grp[0],1,1);
-    }else{
-      var rep=grp[0];
-      var totalQty=grp.reduce(function(s,i){return s+(i.quantity||1);},0);
-      var totalSold=grp.reduce(function(s,i){return s+(i.sold_quantity||0);},0);
-      var byCode=(rep.product_code||'').trim();
-      var groupLabel=byCode?rep.product_code.trim():'상품명+사이즈 묶음';
-      html+='<div class="group-wrap">'+
-        '<div class="group-hdr">'+
-          '<div style="display:flex;align-items:center;gap:8px;">'+
-            '<span class="group-hdr-name">'+(rep.brand?rep.brand+' ':'')+rep.name+(rep.size?' '+rep.size:'')+'</span>'+
-            '<span class="group-code-badge">'+groupLabel+'</span>'+
-          '</div>'+
-          '<div style="display:flex;align-items:center;gap:10px;font-size:12px;color:#888;">'+
-            '<span>합계 '+totalQty+'개 · 판매 '+totalSold+'개</span>'+
-            '<span class="group-fifo-badge">FIFO '+grp.length+'배치</span>'+
-          '</div>'+
-        '</div>'+
-        grp.map(function(it,idx){return card(it,idx+1,grp.length);}).join('')+
-        '</div>';
-    }
+    var allCancelled=groupMap[k].every(function(i){return i.status==='취소/환불';});
+    if(allCancelled)cancelledKeys.push(k);else activeKeys.push(k);
   });
+
+  function renderGroup(k){
+    var grp=groupMap[k];
+    if(grp.length===1)return card(grp[0],1,1);
+    var rep=grp[0];
+    var totalQty=grp.reduce(function(s,i){return s+(i.quantity||1);},0);
+    var totalSold=grp.reduce(function(s,i){return s+(i.sold_quantity||0);},0);
+    var byCode=(rep.product_code||'').trim();
+    var groupLabel=byCode?rep.product_code.trim():'상품명+사이즈 묶음';
+    return '<div class="group-wrap">'+
+      '<div class="group-hdr">'+
+        '<div style="display:flex;align-items:center;gap:8px;">'+
+          '<span class="group-hdr-name">'+(rep.brand?rep.brand+' ':'')+rep.name+(rep.size?' '+rep.size:'')+'</span>'+
+          '<span class="group-code-badge">'+groupLabel+'</span>'+
+        '</div>'+
+        '<div style="display:flex;align-items:center;gap:10px;font-size:12px;color:#888;">'+
+          '<span>합계 '+totalQty+'개 · 판매 '+totalSold+'개</span>'+
+          '<span class="group-fifo-badge">FIFO '+grp.length+'배치</span>'+
+        '</div>'+
+      '</div>'+
+      grp.map(function(it,idx){return card(it,idx+1,grp.length);}).join('')+
+      '</div>';
+  }
+
+  var html='';
+  activeKeys.forEach(function(k){html+=renderGroup(k);});
+  if(cancelledKeys.length){
+    html+='<div class="cancel-divider">취소 / 환불</div>';
+    cancelledKeys.forEach(function(k){html+=renderGroup(k);});
+  }
   el.innerHTML=html;
 }
 
@@ -376,9 +402,12 @@ function buildEditForm(it,ekey){
 }
 
 function statusBadge(s){
+  if(s==='주문완료')return 'bO';
+  if(s==='배송중')return 'bT';
   if(s==='보유중')return 'bY';
   if(s==='등록중')return 'bB';
   if(s==='발송완료')return 'bP';
+  if(s==='취소/환불')return 'bX';
   return 'bG';
 }
 
@@ -429,8 +458,18 @@ function card(it,batchNum,totalBatches){
   var urlBtn=it.order_url?'<a href="'+esc(it.order_url)+'" target="_blank" rel="noopener" class="btn" style="text-decoration:none;">주문확인</a>':'';
   var acts='<button class="btn" onclick="tog(\''+ekey+'\')">수정</button>'+urlBtn;
   var inlineForm=buildEditForm(it,ekey);
-  if(it.status==='보유중'){
+  var cancelBtn='<button class="btnC" onclick="confCancel(\''+it.id+'\')">취소/환불</button>';
+  if(it.status==='주문완료'){
+    acts+='<button class="btn" onclick="confDeliver(\''+it.id+'\')">배송 확인</button>'+
+          cancelBtn+
+          '<button class="btnD" onclick="del(\''+it.id+'\')">삭제</button>';
+  }else if(it.status==='배송중'){
+    acts+='<button class="btnP" onclick="confReceive(\''+it.id+'\')">입고 확인</button>'+
+          cancelBtn+
+          '<button class="btnD" onclick="del(\''+it.id+'\')">삭제</button>';
+  }else if(it.status==='보유중'){
     acts+='<button class="btnP" onclick="tog(\'lf'+it.id+'\')">플랫폼 등록</button>'+
+          cancelBtn+
           '<button class="btnD" onclick="del(\''+it.id+'\')">삭제</button>';
     inlineForm+='<div class="inf'+(oid==='lf'+it.id?' on':'')+'" id="lf'+it.id+'">'+
       '<div class="il">등록 플랫폼</div>'+
@@ -439,6 +478,7 @@ function card(it,batchNum,totalBatches){
       '<button class="btnP" onclick="confList(\''+it.id+'\')">등록 확정</button></div>';
   }else if(it.status==='등록중'){
     acts+='<button class="btnV" onclick="confShip(\''+it.id+'\')">발송 처리</button>'+
+          cancelBtn+
           '<button class="btnD" onclick="del(\''+it.id+'\')">삭제</button>';
   }else if(it.status==='발송완료'||(it.status==='판매완료'&&remain>0)){
     var btnLabel=it.status==='발송완료'?'판매 확정':'추가 판매';
@@ -458,7 +498,7 @@ function card(it,batchNum,totalBatches){
     acts+='<button class="btnD" onclick="del(\''+it.id+'\')">삭제</button>';
   }
 
-  return '<div class="'+(isGrouped?'group-card':'card')+'">'+
+  return '<div class="'+(isGrouped?'group-card':'card')+(it.status==='취소/환불'?' card-cancelled':'')+'">'+
     '<div class="ctop">'+
       '<div style="flex:1">'+
         '<div class="cn">'+titleHtml+'</div>'+
@@ -516,7 +556,7 @@ async function addItem(){
   if(!name||!price||!date){alert('상품명, 매입가, 매입일은 필수예요!');return;}
   if(!sb){alert('설정 탭에서 Supabase 키를 먼저 입력해주세요.');return;}
   var res=await sb.from('items').insert([{
-    name:name,size:size,source:source,buy_price:price,buy_date:date,note:note,status:'보유중',
+    name:name,size:size,source:source,buy_price:price,buy_date:date,note:note,status:document.getElementById('fst').value,
     brand:brand,category:category,product_code:productCode,quantity:qty,sold_quantity:0,order_url:orderUrl
   }]);
   if(res.error){alert('등록 실패: '+res.error.message);return;}
@@ -531,6 +571,25 @@ async function confList(id){
   var res=await sb.from('items').update({status:'등록중',platform:platform}).eq('id',id);
   if(res.error){alert('오류: '+res.error.message);return;}
   oid=null;load();
+}
+
+async function confDeliver(id){
+  var res=await sb.from('items').update({status:'배송중'}).eq('id',id);
+  if(res.error){alert('오류: '+res.error.message);return;}
+  load();
+}
+
+async function confReceive(id){
+  var res=await sb.from('items').update({status:'보유중'}).eq('id',id);
+  if(res.error){alert('오류: '+res.error.message);return;}
+  load();
+}
+
+async function confCancel(id){
+  if(!confirm('취소/환불 처리하시겠어요?'))return;
+  var res=await sb.from('items').update({status:'취소/환불'}).eq('id',id);
+  if(res.error){alert('오류: '+res.error.message);return;}
+  load();
 }
 
 async function confShip(id){
