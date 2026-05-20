@@ -531,7 +531,9 @@ function card(it,batchNum,totalBatches){
     '<div class="ctop" onclick="toggleCard(\''+it.id+'\')" style="cursor:pointer;user-select:none;">'+
       '<div style="flex:1">'+
         '<div class="cn">'+titleHtml+'</div>'+
-        (it.size?'<div class="cs">'+it.size+'</div>':'')+
+        '<div class="cs">'+
+          [it.size,it.source,it.buy_date?'매입 '+it.buy_date:null,it.buy_price?(it.buy_price).toLocaleString()+'원':null].filter(Boolean).join(' · ')+
+        '</div>'+
       '</div>'+
       '<div class="badges">'+
         fifoBadge+
