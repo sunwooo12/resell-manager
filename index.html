@@ -403,15 +403,12 @@ async function confirmBundleShip(){
   var c=parseInt(document.getElementById('bundleCourier').value)||0;
   var b=parseInt(document.getElementById('bundleBox').value)||0;
   var platform=document.getElementById('bundlePlatform').value;
-  var isStorage=platform==='크림(보관)';
   var per=Math.round((c+b)/Math.max(checkedItems.size,1));
   var ids=Array.from(checkedItems);
   for(var i=0;i<ids.length;i++){
     var it=items.find(function(x){return String(x.id)===ids[i];});
     var curShip=it?it.shipping_cost||0:0;
-    var curOther=it?it.other_cost||0:0;
     var updateData={status:'발송완료',platform:platform,shipping_cost:curShip+per};
-    if(isStorage){updateData.other_cost=curOther+3000;}
     var res=await sb.from('items').update(updateData).eq('id',ids[i]);
     if(res.error){alert('오류: '+res.error.message);return;}
   }
@@ -740,15 +737,9 @@ function card(it,batchNum,totalBatches){
     inlineForm+=sellForm;
   }else if(it.status==='판매완료'&&remain>0){
     acts+='<button class="btnP" onclick="tog(\''+sellKey+'\')">추가 판매</button>';
-    if(it.platform==='크림(보관)'){
-      acts+='<button class="btn" onclick="confRefundDeposit(\''+it.id+'\')">보증금 환불</button>';
-    }
     acts+='<button class="btnD" onclick="del(\''+it.id+'\')">삭제</button>';
     inlineForm+=sellForm;
   }else{
-    if(it.status==='판매완료'&&it.platform==='크림(보관)'){
-      acts+='<button class="btn" onclick="confRefundDeposit(\''+it.id+'\')">보증금 환불</button>';
-    }
     acts+='<button class="btnD" onclick="del(\''+it.id+'\')">삭제</button>';
   }
 
@@ -833,9 +824,7 @@ async function confShipWithPlatform(id){
   var platform=document.getElementById('lp'+id).value;
   var shipCost=parseInt(document.getElementById('lship'+id).value)||0;
   var item=items.find(function(i){return i.id==id;});
-  var isStorage=platform==='크림(보관)';
   var updateData={status:'발송완료',platform:platform,shipping_cost:(item.shipping_cost||0)+shipCost};
-  if(isStorage){updateData.other_cost=(item.other_cost||0)+3000;}  // 보증금 3,000원 자동 추가
   var res=await sb.from('items').update(updateData).eq('id',id);
   if(res.error){alert('오류: '+res.error.message);return;}
   oid=null;load();
@@ -854,14 +843,6 @@ async function confWait(id){
   load();
 }
 
-async function confRefundDeposit(id){
-  if(!confirm('보증금 3,000원이 환불되었나요?'))return;
-  var item=items.find(function(i){return i.id==id;});
-  var newCost=Math.max(0,(item.other_cost||0)-3000);
-  var res=await sb.from('items').update({other_cost:newCost}).eq('id',id);
-  if(res.error){alert('오류: '+res.error.message);return;}
-  load();
-}
 
 async function confDeliver(id){
   var res=await sb.from('items').update({status:'배송중'}).eq('id',id);
