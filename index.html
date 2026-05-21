@@ -813,7 +813,15 @@ function card(it,batchNum,totalBatches){
           [it.size,it.source,it.buy_date?'매입 '+it.buy_date:null,it.buy_price?(it.buy_price).toLocaleString()+'원':null].filter(Boolean).join(' · ')+
         '</div>'+
       '</div>'+
-      '<div class="badges">'+storageBadge+fifoBadge+'<span class="badge '+bc+'">'+it.status+'</span>'+chevron+'</div>'+
+      '<div class="badges">'+storageBadge+fifoBadge+(function(){
+        if(it.status!=='판매완료'||(it.sold_quantity||0)===0)return '';
+        var sq=it.sold_quantity||0;
+        var profit=(it.sell_price||0)*sq-(it.buy_price||0)*sq-(it.fee||0);
+        var cost=(it.buy_price||0)*sq;
+        var rate=cost>0?Math.round(profit/cost*100):0;
+        var c=profit>=0?'#16a34a':'#dc2626';
+        return '<span style="font-size:11px;font-weight:700;color:'+c+';white-space:nowrap;">'+(profit>=0?'+':'')+profit.toLocaleString()+'원 · '+(rate>=0?'+':'')+rate+'%</span>';
+      }())+'<span class="badge '+bc+'">'+it.status+'</span>'+chevron+'</div>'+
     '</div>'+
     (isExpanded?
       '<div style="padding-top:2px;">'+
