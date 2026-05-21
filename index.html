@@ -128,6 +128,7 @@ button.btnC{padding:6px 14px;border-radius:8px;border:1px solid #cbd5e1;backgrou
     <button class="nb" id="t0" onclick="go(0)">재고 현황</button>
     <button class="nb" id="t1" onclick="go(1)">매입 등록</button>
     <button class="nb" id="t2" onclick="go(2)">수익 통계</button>
+    <button class="nb" id="t4" onclick="go(4)">기간 분석</button>
     <button class="nb" id="t3" onclick="go(3)">설정</button>
   </nav>
 </header>
@@ -261,6 +262,33 @@ button.btnC{padding:6px 14px;border-radius:8px;border:1px solid #cbd5e1;backgrou
     </div>
   </div>
 
+  <!-- 기간 분석 -->
+  <div class="sec" id="s4">
+    <div class="fc" style="max-width:100%;margin-bottom:16px;">
+      <div style="font-size:15px;font-weight:700;margin-bottom:16px;">월별 수익 추이 (최근 6개월)</div>
+      <canvas id="monthChart" style="width:100%;display:block;" height="200"></canvas>
+    </div>
+    <div class="fc" style="max-width:100%;margin-bottom:16px;">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+        <button class="btn" onclick="calMove(-1)">← 이전달</button>
+        <div id="calTitle" style="font-size:15px;font-weight:700;flex:1;text-align:center;"></div>
+        <button class="btn" onclick="calMove(1)">다음달 →</button>
+      </div>
+      <div id="calGrid"></div>
+    </div>
+    <div class="fc" style="max-width:100%;margin-bottom:16px;">
+      <div style="font-size:15px;font-weight:700;margin-bottom:16px;">평균 보유기간</div>
+      <div id="holdStats"></div>
+    </div>
+    <div class="fc" style="max-width:100%;">
+      <div style="font-size:15px;font-weight:700;margin-bottom:16px;">수익 TOP 5</div>
+      <table class="stab">
+        <thead><tr><th>상품명</th><th>매입가</th><th>판매가</th><th>순수익</th></tr></thead>
+        <tbody id="top5Stats"></tbody>
+      </table>
+    </div>
+  </div>
+
   <!-- 설정 -->
   <div class="sec" id="s3">
     <div class="cfg">
@@ -293,7 +321,7 @@ ALTER TABLE items ADD COLUMN IF NOT EXISTS other_cost INT DEFAULT 0;</div>
 <script>
 var sb=null,items=[],cf='all',pf='all',oid=null,expanded=new Set(),checkedItems=new Set(),searchQ='',sortAsc=true;
 var PLATFORMS=['크림(일반)','크림(보관)','포이즌','기타'];
-var tabs=['t0','t1','t2','t3'],secs=['s0','s1','s2','s3'];
+var tabs=['t0','t1','t2','t3','t4'],secs=['s0','s1','s2','s3','s4'];
 
 function go(i){
   tabs.forEach(function(t,j){
@@ -302,6 +330,7 @@ function go(i){
   });
   if(i===0)load();
   if(i===2)loadStats();
+  if(i===4)loadAnalysis();
   if(i===3){
     document.getElementById('cu').value=localStorage.getItem('rsu')||'';
     document.getElementById('ck').value=localStorage.getItem('rsk')||'';
@@ -1056,6 +1085,149 @@ async function loadStats(){
   }).join('');
   document.getElementById('catStats').innerHTML=rows||
     '<tr><td colspan="4" style="color:#888;text-align:center;padding:20px;">데이터 없음</td></tr>';
+}
+
+var calYear=new Date().getFullYear(),calMonth=new Date().getMonth(),analysisData=[];
+
+function calMove(d){
+  calMonth+=d;
+  if(calMonth<0){calMonth=11;calYear--;}
+  if(calMonth>11){calMonth=0;calYear++;}
+  renderCal(analysisData);
+}
+
+async function loadAnalysis(){
+  if(!sb){return;}
+  var res=await sb.from('items').select('*');
+  analysisData=res.data||[];
+  renderMonthChart(analysisData);
+  renderCal(analysisData);
+  renderHoldStats(analysisData);
+  renderTop5(analysisData);
+}
+
+function renderMonthChart(its){
+  var canvas=document.getElementById('monthChart');
+  if(!canvas)return;
+  canvas.width=canvas.offsetWidth||800;
+  var ctx=canvas.getContext('2d');
+  var W=canvas.width,H=canvas.height;
+  ctx.clearRect(0,0,W,H);
+  var now=new Date();
+  var months=[];
+  for(var i=5;i>=0;i--){
+    var d=new Date(now.getFullYear(),now.getMonth()-i,1);
+    months.push({key:d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'),label:(d.getMonth()+1)+'월'});
+  }
+  var profits=months.map(function(mo){
+    return its.filter(function(i){return (i.sold_quantity||0)>0&&(i.sell_date||'').startsWith(mo.key);})
+      .reduce(function(s,i){var sq=i.sold_quantity||0;return s+(i.sell_price||0)*sq-(i.buy_price||0)*sq-(i.fee||0);},0);
+  });
+  var pad={t:24,b:36,l:10,r:10};
+  var cW=W-pad.l-pad.r,cH=H-pad.t-pad.b;
+  var maxAbs=Math.max.apply(null,profits.map(function(p){return Math.abs(p);}));
+  if(maxAbs===0)maxAbs=1;
+  var hasNeg=profits.some(function(p){return p<0;});
+  var baseY=hasNeg?pad.t+cH/2:pad.t+cH;
+  var scaleH=hasNeg?cH/2:cH;
+  var barW=cW/months.length*0.55;
+  var slot=cW/months.length;
+  // baseline
+  ctx.strokeStyle='#d1d5db';ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(pad.l,baseY);ctx.lineTo(W-pad.r,baseY);ctx.stroke();
+  profits.forEach(function(p,i){
+    var x=pad.l+slot*i+(slot-barW)/2;
+    var barH=Math.abs(p)/maxAbs*scaleH;
+    var y=p>=0?baseY-barH:baseY;
+    ctx.fillStyle=p>=0?'#16a34a':'#dc2626';
+    ctx.beginPath();
+    if(ctx.roundRect){ctx.roundRect(x,y,barW,Math.max(barH,2),3);}
+    else{ctx.rect(x,y,barW,Math.max(barH,2));}
+    ctx.fill();
+    // month label
+    ctx.fillStyle='#888';ctx.font='12px sans-serif';ctx.textAlign='center';
+    ctx.fillText(months[i].label,x+barW/2,H-6);
+    // value label
+    if(p!==0){
+      ctx.fillStyle=p>=0?'#16a34a':'#dc2626';ctx.font='bold 11px sans-serif';
+      var wan=Math.round(Math.abs(p)/10000);
+      var txt=(p>=0?'+':'-')+(wan>0?wan+'만':Math.round(Math.abs(p)/1000)+'천');
+      ctx.fillText(txt,x+barW/2,p>=0?Math.max(y-4,pad.t+10):y+barH+12);
+    }
+  });
+}
+
+function renderCal(its){
+  var el=document.getElementById('calGrid');
+  var titleEl=document.getElementById('calTitle');
+  if(!el)return;
+  titleEl.textContent=calYear+'년 '+(calMonth+1)+'월';
+  var mm=calYear+'-'+String(calMonth+1).padStart(2,'0');
+  var dayMap={};
+  its.forEach(function(it){
+    if(!(it.sell_date||'').startsWith(mm))return;
+    var day=parseInt((it.sell_date||'').substring(8))||0;
+    if(!day)return;
+    var sq=it.sold_quantity||0;
+    dayMap[day]=(dayMap[day]||0)+(it.sell_price||0)*sq-(it.buy_price||0)*sq-(it.fee||0);
+  });
+  var firstDay=new Date(calYear,calMonth,1).getDay();
+  var daysInMonth=new Date(calYear,calMonth+1,0).getDate();
+  var now=new Date();
+  var todayD=(now.getFullYear()===calYear&&now.getMonth()===calMonth)?now.getDate():0;
+  var days=['일','월','화','수','목','금','토'];
+  var html='<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px;">';
+  days.forEach(function(d){html+='<div style="font-size:11px;color:#888;padding:6px 0;text-align:center;font-weight:700;">'+d+'</div>';});
+  for(var i=0;i<firstDay;i++)html+='<div></div>';
+  for(var d=1;d<=daysInMonth;d++){
+    var p=dayMap[d]||0;
+    var isTd=d===todayD;
+    html+='<div style="border-radius:8px;padding:5px 3px;min-height:48px;text-align:center;background:'+(isTd?'#f5f4f0':'transparent')+';border:1px solid '+(isTd?'#d1d5db':'transparent')+';box-sizing:border-box;">'+
+      '<div style="font-size:12px;color:'+(isTd?'#1a1a1a':'#555')+';font-weight:'+(isTd?'700':'400')+';">'+d+'</div>'+
+      (p?'<div style="font-size:10px;font-weight:700;color:'+(p>=0?'#16a34a':'#dc2626')+';">'+(p>=0?'+':'')+Math.round(p/10000)+'만</div>':'')+'</div>';
+  }
+  html+='</div>';
+  el.innerHTML=html;
+}
+
+function renderHoldStats(its){
+  var el=document.getElementById('holdStats');
+  if(!el)return;
+  function avgHold(arr){
+    var v=arr.filter(function(i){return i.buy_date&&i.sell_date&&(i.sold_quantity||0)>0;});
+    if(!v.length)return null;
+    return Math.round(v.reduce(function(s,i){return s+Math.floor((new Date(i.sell_date)-new Date(i.buy_date))/86400000);},0)/v.length);
+  }
+  var overall=avgHold(its);
+  var cats=['신발','의류','잡화','액세서리','기타'];
+  var html='<div style="margin-bottom:14px;font-size:14px;color:#888;">전체 평균: <b style="font-size:22px;font-weight:700;color:#1a1a1a;">'+(overall!==null?overall+'일':'-')+'</b></div>'+
+    '<table class="stab"><thead><tr><th>카테고리</th><th>평균 보유기간</th><th>판매 건수</th></tr></thead><tbody>'+
+    cats.map(function(cat){
+      var ci=its.filter(function(i){return (i.category||'기타')===cat;});
+      var avg=avgHold(ci);
+      var cnt=ci.filter(function(i){return (i.sold_quantity||0)>0&&i.buy_date&&i.sell_date;}).length;
+      return cnt?'<tr><td>'+cat+'</td><td>'+(avg!==null?avg+'일':'-')+'</td><td>'+cnt+'건</td></tr>':'';
+    }).join('')+
+    '</tbody></table>';
+  el.innerHTML=html;
+}
+
+function renderTop5(its){
+  var el=document.getElementById('top5Stats');
+  if(!el)return;
+  var sold=its.filter(function(i){return (i.sold_quantity||0)>0;})
+    .map(function(i){
+      var sq=i.sold_quantity||0;
+      var profit=(i.sell_price||0)*sq-(i.buy_price||0)*sq-(i.fee||0);
+      return {name:(i.brand?i.brand+' ':'')+i.name+(i.size?' '+i.size:''),buy:i.buy_price||0,sell:i.sell_price||0,profit:profit,sq:sq};
+    })
+    .sort(function(a,b){return b.profit-a.profit;}).slice(0,5);
+  if(!sold.length){el.innerHTML='<tr><td colspan="4" style="text-align:center;color:#888;padding:20px;">데이터 없음</td></tr>';return;}
+  el.innerHTML=sold.map(function(it){
+    var pc=it.profit>=0?'color:#16a34a':'color:#dc2626';
+    return '<tr><td>'+it.name+'</td><td>'+it.buy.toLocaleString()+'원</td><td>'+it.sell.toLocaleString()+'원'+(it.sq>1?' ×'+it.sq:'')+'</td>'+
+      '<td style="font-weight:700;'+pc+'">'+(it.profit>=0?'+':'')+it.profit.toLocaleString()+'원</td></tr>';
+  }).join('');
 }
 
 document.getElementById('fd').value=new Date().toISOString().split('T')[0];
