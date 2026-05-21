@@ -273,6 +273,13 @@ button.btnC{padding:6px 14px;border-radius:8px;border:1px solid #cbd5e1;backgrou
       <canvas id="monthChart" style="width:100%;display:block;" height="200"></canvas>
     </div>
     <div class="fc" style="max-width:100%;margin-bottom:16px;">
+      <div style="font-size:15px;font-weight:700;margin-bottom:16px;">월별 현황 (최근 12개월)</div>
+      <table class="stab">
+        <thead><tr><th>월</th><th>매출</th><th>순수익</th><th>매입비용</th><th>판매수량</th></tr></thead>
+        <tbody id="monthTableBody"></tbody>
+      </table>
+    </div>
+    <div class="fc" style="max-width:100%;margin-bottom:16px;">
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
         <button class="btn" onclick="calMove(-1)">← 이전달</button>
         <div id="calTitle" style="font-size:15px;font-weight:700;flex:1;text-align:center;"></div>
@@ -281,13 +288,21 @@ button.btnC{padding:6px 14px;border-radius:8px;border:1px solid #cbd5e1;backgrou
       <div id="calGrid"></div>
     </div>
     <div class="fc" style="max-width:100%;margin-bottom:16px;">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+        <button class="btn" onclick="buyCalMove(-1)">← 이전달</button>
+        <div id="buyCalTitle" style="font-size:15px;font-weight:700;flex:1;text-align:center;"></div>
+        <button class="btn" onclick="buyCalMove(1)">다음달 →</button>
+      </div>
+      <div id="buyCalGrid"></div>
+    </div>
+    <div class="fc" style="max-width:100%;margin-bottom:16px;">
       <div style="font-size:15px;font-weight:700;margin-bottom:16px;">평균 보유기간</div>
       <div id="holdStats"></div>
     </div>
     <div class="fc" style="max-width:100%;">
       <div style="font-size:15px;font-weight:700;margin-bottom:16px;">수익 TOP 5</div>
       <table class="stab">
-        <thead><tr><th>상품명</th><th>매입가</th><th>판매가</th><th>순수익</th></tr></thead>
+        <thead><tr><th>상품명</th><th>매입가</th><th>판매가</th><th>순수익</th><th>마진율</th></tr></thead>
         <tbody id="top5Stats"></tbody>
       </table>
     </div>
@@ -1109,6 +1124,7 @@ async function loadStats(){
 }
 
 var calYear=new Date().getFullYear(),calMonth=new Date().getMonth(),analysisData=[];
+var buyCalYear=new Date().getFullYear(),buyCalMonth=new Date().getMonth();
 
 function calMove(d){
   calMonth+=d;
@@ -1116,13 +1132,21 @@ function calMove(d){
   if(calMonth>11){calMonth=0;calYear++;}
   renderCal(analysisData);
 }
+function buyCalMove(d){
+  buyCalMonth+=d;
+  if(buyCalMonth<0){buyCalMonth=11;buyCalYear--;}
+  if(buyCalMonth>11){buyCalMonth=0;buyCalYear++;}
+  renderBuyCal(analysisData);
+}
 
 async function loadAnalysis(){
   if(!sb){return;}
   var res=await sb.from('items').select('*');
   analysisData=res.data||[];
   renderMonthChart(analysisData);
+  renderMonthTable(analysisData);
   renderCal(analysisData);
+  renderBuyCal(analysisData);
   renderHoldStats(analysisData);
   renderTop5(analysisData);
 }
@@ -1233,6 +1257,64 @@ function renderHoldStats(its){
   el.innerHTML=html;
 }
 
+function renderMonthTable(its){
+  var el=document.getElementById('monthTableBody');
+  if(!el)return;
+  var now=new Date();
+  var rows='';
+  for(var i=0;i<12;i++){
+    var d=new Date(now.getFullYear(),now.getMonth()-i,1);
+    var mm=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+    var label=d.getFullYear()+'년 '+(d.getMonth()+1)+'월';
+    var soldItems=its.filter(function(it){return (it.sold_quantity||0)>0&&(it.sell_date||'').startsWith(mm);});
+    var sales=soldItems.reduce(function(s,it){return s+(it.sell_price||0)*(it.sold_quantity||0);},0);
+    var profit=soldItems.reduce(function(s,it){var sq=it.sold_quantity||0;return s+(it.sell_price||0)*sq-(it.buy_price||0)*sq-(it.fee||0);},0);
+    var buyCost=its.filter(function(it){return (it.buy_date||'').startsWith(mm);}).reduce(function(s,it){return s+(it.buy_price||0)*(it.quantity||1);},0);
+    var qty=soldItems.reduce(function(s,it){return s+(it.sold_quantity||0);},0);
+    if(sales===0&&buyCost===0)continue;
+    var pc=profit>=0?'color:#16a34a':'color:#dc2626';
+    rows+='<tr><td>'+label+'</td><td>'+sales.toLocaleString()+'원</td>'+
+      '<td style="font-weight:600;'+pc+'">'+(profit>=0?'+':'')+profit.toLocaleString()+'원</td>'+
+      '<td>'+buyCost.toLocaleString()+'원</td><td>'+qty+'개</td></tr>';
+  }
+  el.innerHTML=rows||'<tr><td colspan="5" style="text-align:center;color:#888;padding:20px;">데이터 없음</td></tr>';
+}
+
+function renderBuyCal(its){
+  var el=document.getElementById('buyCalGrid');
+  var titleEl=document.getElementById('buyCalTitle');
+  if(!el)return;
+  titleEl.textContent='일별 매입 현황 — '+buyCalYear+'년 '+(buyCalMonth+1)+'월';
+  var mm=buyCalYear+'-'+String(buyCalMonth+1).padStart(2,'0');
+  var dayMap={};
+  its.forEach(function(it){
+    if(!(it.buy_date||'').startsWith(mm))return;
+    var day=parseInt((it.buy_date||'').substring(8))||0;
+    if(!day)return;
+    dayMap[day]=(dayMap[day]||0)+(it.buy_price||0)*(it.quantity||1);
+  });
+  var firstDay=new Date(buyCalYear,buyCalMonth,1).getDay();
+  var daysInMonth=new Date(buyCalYear,buyCalMonth+1,0).getDate();
+  var now=new Date();
+  var todayD=(now.getFullYear()===buyCalYear&&now.getMonth()===buyCalMonth)?now.getDate():0;
+  var days=['일','월','화','수','목','금','토'];
+  var html='<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px;">';
+  days.forEach(function(d){html+='<div style="font-size:11px;color:#888;padding:6px 0;text-align:center;font-weight:700;">'+d+'</div>';});
+  for(var i=0;i<firstDay;i++)html+='<div></div>';
+  for(var d=1;d<=daysInMonth;d++){
+    var amt=dayMap[d]||0;
+    var isTd=d===todayD;
+    var hasBuy=amt>0;
+    html+='<div style="border-radius:8px;padding:5px 3px;min-height:48px;text-align:center;'+
+      'background:'+(hasBuy?'#eff6ff':isTd?'#f5f4f0':'transparent')+';'+
+      'border:1px solid '+(hasBuy?'#bfdbfe':isTd?'#d1d5db':'transparent')+';box-sizing:border-box;">'+
+      '<div style="font-size:12px;color:'+(isTd?'#1a1a1a':'#555')+';font-weight:'+(isTd?'700':'400')+';">'+d+'</div>'+
+      (hasBuy?'<div style="font-size:10px;font-weight:700;color:#2563eb;">'+Math.round(amt/10000)+'만</div>':'')+'</div>';
+  }
+  html+='</div>';
+  el.innerHTML=html;
+}
+
 function renderTop5(its){
   var el=document.getElementById('top5Stats');
   if(!el)return;
@@ -1240,14 +1322,17 @@ function renderTop5(its){
     .map(function(i){
       var sq=i.sold_quantity||0;
       var profit=(i.sell_price||0)*sq-(i.buy_price||0)*sq-(i.fee||0);
-      return {name:(i.brand?i.brand+' ':'')+i.name+(i.size?' '+i.size:''),buy:i.buy_price||0,sell:i.sell_price||0,profit:profit,sq:sq};
+      var cost=(i.buy_price||0)*sq;
+      var rate=cost>0?Math.round(profit/cost*100):0;
+      return {name:(i.brand?i.brand+' ':'')+i.name+(i.size?' '+i.size:''),buy:i.buy_price||0,sell:i.sell_price||0,profit:profit,sq:sq,rate:rate};
     })
     .sort(function(a,b){return b.profit-a.profit;}).slice(0,5);
-  if(!sold.length){el.innerHTML='<tr><td colspan="4" style="text-align:center;color:#888;padding:20px;">데이터 없음</td></tr>';return;}
+  if(!sold.length){el.innerHTML='<tr><td colspan="5" style="text-align:center;color:#888;padding:20px;">데이터 없음</td></tr>';return;}
   el.innerHTML=sold.map(function(it){
     var pc=it.profit>=0?'color:#16a34a':'color:#dc2626';
     return '<tr><td>'+it.name+'</td><td>'+it.buy.toLocaleString()+'원</td><td>'+it.sell.toLocaleString()+'원'+(it.sq>1?' ×'+it.sq:'')+'</td>'+
-      '<td style="font-weight:700;'+pc+'">'+(it.profit>=0?'+':'')+it.profit.toLocaleString()+'원</td></tr>';
+      '<td style="font-weight:700;'+pc+'">'+(it.profit>=0?'+':'')+it.profit.toLocaleString()+'원</td>'+
+      '<td style="font-weight:600;'+pc+'">'+(it.rate>=0?'+':'')+it.rate+'%</td></tr>';
   }).join('');
 }
 
