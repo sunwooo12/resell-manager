@@ -161,6 +161,7 @@ button.btnC{padding:6px 14px;border-radius:8px;border:1px solid #cbd5e1;backgrou
         <option value="all">전체 카테고리</option>
         <option>신발</option><option>의류</option><option>잡화</option><option>액세서리</option><option>기타</option>
       </select>
+      <button class="fb" id="sortBtn" onclick="sortAsc=!sortAsc;document.getElementById('sortBtn').textContent=sortAsc?'오래된순 ↑':'최신순 ↓';render()">오래된순 ↑</button>
       <button class="ab" onclick="go(1)">+ 매입 등록</button>
     </div>
     <div class="fifo-note"><span class="fifo-dot"></span>FIFO 정렬 — 오래된 매입 우선 표시</div>
@@ -290,7 +291,7 @@ ALTER TABLE items ADD COLUMN IF NOT EXISTS other_cost INT DEFAULT 0;</div>
 
 </main>
 <script>
-var sb=null,items=[],cf='all',pf='all',oid=null,expanded=new Set(),checkedItems=new Set(),searchQ='';
+var sb=null,items=[],cf='all',pf='all',oid=null,expanded=new Set(),checkedItems=new Set(),searchQ='',sortAsc=true;
 var PLATFORMS=['크림(일반)','크림(보관)','포이즌','기타'];
 var tabs=['t0','t1','t2','t3'],secs=['s0','s1','s2','s3'];
 
@@ -516,7 +517,8 @@ function render(){
   });
 
   groupKeys.sort(function(a,b){
-    return (groupMap[a][0].buy_date||'').localeCompare(groupMap[b][0].buy_date||'');
+    var cmp=(groupMap[a][0].buy_date||'').localeCompare(groupMap[b][0].buy_date||'');
+    return sortAsc?cmp:-cmp;
   });
 
   var activeKeys=[],cancelledKeys=[];
