@@ -1001,7 +1001,7 @@ async function loadStats(){
     .reduce(function(s,i){return s+calcStorageFee(i.storage_start_date);},0);
   var totalShipping=its.reduce(function(s,i){return s+(i.shipping_cost||0);},0);
   var totalOther=its.reduce(function(s,i){return s+(i.other_cost||0);},0);
-  var realProfit=tp-totalStorage-totalShipping-totalOther;
+  var realProfit=tp-totalStorage-totalShipping;
   var q0=document.getElementById('q0');q0.textContent=(tp>=0?'+':'')+tp.toLocaleString()+'원';q0.className='sv '+(tp>=0?'g':'r');
   document.getElementById('q1').textContent=totalStorage>0?'-'+totalStorage.toLocaleString()+'원':'0원';
   document.getElementById('q2').textContent=totalShipping>0?'-'+totalShipping.toLocaleString()+'원':'0원';
