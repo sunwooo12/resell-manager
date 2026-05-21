@@ -205,7 +205,7 @@ button.btnC{padding:6px 14px;border-radius:8px;border:1px solid #cbd5e1;backgrou
         <div><label>상품코드</label><input type="text" id="fpc" placeholder="DD1391-100"/></div>
         <div><label>매입처</label>
           <select id="fs">
-            <option>SSG</option><option>무신사</option><option>네이버</option><option>오프라인</option><option>기타</option>
+            <option>SSG</option><option>무신사</option><option>네이버</option><option>GS SHOP</option><option>29CM</option><option>W컨셉</option><option>나이키공홈</option><option>아디다스공홈</option><option>쿠팡</option><option>롯데온</option><option>4910</option><option>에이블리</option><option>지그재그</option><option>ABC마트</option><option>오프라인</option><option>기타</option>
           </select>
         </div>
         <div><label>매입 상태</label>
@@ -385,7 +385,7 @@ function updateBundleBar(){
       '<button style="background:#16a34a;color:#fff;" onclick="bulkUpdateField(\'buy_price\',document.getElementById(\'bulkPriceIn\').value,\'매입가\')">매입가 변경</button>'+
       '<select id="bulkSourceSel" style="'+inS+'">'+
         '<option value="">매입처 선택</option>'+
-        ['SSG','무신사','네이버','오프라인','기타'].map(function(s){return '<option>'+s+'</option>';}).join('')+
+        ['SSG','무신사','네이버','GS SHOP','29CM','W컨셉','나이키공홈','아디다스공홈','쿠팡','롯데온','4910','에이블리','지그재그','ABC마트','오프라인','기타'].map(function(s){return '<option>'+s+'</option>';}).join('')+
       '</select>'+
       '<button style="background:#16a34a;color:#fff;" onclick="bulkUpdateField(\'source\',document.getElementById(\'bulkSourceSel\').value,\'매입처\')">매입처 변경</button>'+
       '<button style="background:#555;color:#fff;" onclick="checkedItems.clear();render()">선택 해제</button>'+
@@ -598,7 +598,7 @@ function selOpts(opts,cur){
 
 function buildEditForm(it,ekey){
   var cats=['신발','의류','잡화','액세서리','기타'];
-  var sources=['SSG','무신사','네이버','오프라인','기타'];
+  var sources=['SSG','무신사','네이버','GS SHOP','29CM','W컨셉','나이키공홈','아디다스공홈','쿠팡','롯데온','4910','에이블리','지그재그','ABC마트','오프라인','기타'];
   var s='padding:7px 10px;border:1px solid #e2e0da;border-radius:8px;font-size:13px;width:100%;font-family:\'Noto Sans KR\',sans-serif;background:#fff;';
   var sq=it.sold_quantity||0;
   var settleVal=it.sell_price&&sq>0?it.sell_price*sq-(it.fee||0):'';
