@@ -369,15 +369,45 @@ function updateBundleBar(){
   if(!el)return;
   if(checkedItems.size>0){
     var opts=['주문완료','배송중','보유중','발송완료','검수중','판매대기','판매완료','취소/환불'];
-    el.innerHTML='<div class="bundle-bar"><span>'+checkedItems.size+'개 선택됨</span>'+
+    var inS='padding:6px 10px;border-radius:8px;border:none;font-size:13px;font-family:\'Noto Sans KR\',sans-serif;background:#333;color:#fff;cursor:pointer;';
+    el.innerHTML='<div class="bundle-bar" style="flex-wrap:wrap;gap:10px;">'+
+      '<span>'+checkedItems.size+'개 선택됨</span>'+
       '<button style="background:#3b82f6;color:#fff;" onclick="bundleShip()">묶음 발송</button>'+
-      '<select id="bulkStatusSel" style="padding:6px 10px;border-radius:8px;border:none;font-size:13px;font-family:\'Noto Sans KR\',sans-serif;background:#333;color:#fff;cursor:pointer;">'+
+      '<select id="bulkStatusSel" style="'+inS+'">'+
         '<option value="">상태 선택</option>'+
         opts.map(function(s){return '<option>'+s+'</option>';}).join('')+
       '</select>'+
       '<button style="background:#16a34a;color:#fff;" onclick="bulkUpdateStatus()">변경</button>'+
-      '<button style="background:#555;color:#fff;" onclick="checkedItems.clear();render()">선택 해제</button></div>';
+      '<span style="width:1px;height:20px;background:#444;display:inline-block;"></span>'+
+      '<input type="date" id="bulkDateIn" style="'+inS+'">'+
+      '<button style="background:#16a34a;color:#fff;" onclick="bulkUpdateField(\'buy_date\',document.getElementById(\'bulkDateIn\').value,\'매입일\')">매입일 변경</button>'+
+      '<input type="number" id="bulkPriceIn" placeholder="매입가" style="'+inS+'width:90px;">'+
+      '<button style="background:#16a34a;color:#fff;" onclick="bulkUpdateField(\'buy_price\',document.getElementById(\'bulkPriceIn\').value,\'매입가\')">매입가 변경</button>'+
+      '<select id="bulkSourceSel" style="'+inS+'">'+
+        '<option value="">매입처 선택</option>'+
+        ['SSG','무신사','네이버','오프라인','기타'].map(function(s){return '<option>'+s+'</option>';}).join('')+
+      '</select>'+
+      '<button style="background:#16a34a;color:#fff;" onclick="bulkUpdateField(\'source\',document.getElementById(\'bulkSourceSel\').value,\'매입처\')">매입처 변경</button>'+
+      '<button style="background:#555;color:#fff;" onclick="checkedItems.clear();render()">선택 해제</button>'+
+    '</div>';
   }else{el.innerHTML='';}
+}
+async function bulkUpdateField(field,value,label){
+  if(!value){return;}
+  var ids=Array.from(checkedItems);
+  if(!ids.length)return;
+  var parsed=field==='buy_price'?parseInt(value):value;
+  if(field==='buy_price'&&(!parsed||parsed<=0)){return;}
+  if(!confirm(ids.length+'개 항목의 '+label+'을(를) 변경하시겠어요?'))return;
+  var sy=window.scrollY;
+  var update={};update[field]=parsed;
+  for(var i=0;i<ids.length;i++){
+    var res=await sb.from('items').update(update).eq('id',ids[i]);
+    if(res.error){alert('오류: '+res.error.message);return;}
+  }
+  checkedItems.clear();
+  await load();
+  window.scrollTo(0,sy);
 }
 function bundleShip(){
   if(!checkedItems.size){return;}
