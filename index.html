@@ -539,7 +539,7 @@ async function load(){
   items=res.data||[];
 
   var total=items.length;
-  var holdQty=items.filter(function(i){return i.status!=='판매완료';}).reduce(function(s,i){
+  var holdQty=items.filter(function(i){return i.status==='보유중';}).reduce(function(s,i){
     return s+((i.quantity||1)-(i.sold_quantity||0));
   },0);
   var now=new Date();
