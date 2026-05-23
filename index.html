@@ -436,6 +436,13 @@ function updateBundleBar(){
         ['SSG','무신사','네이버','GS SHOP','29CM','W컨셉','나이키공홈','아디다스공홈','쿠팡','롯데온','4910','에이블리','지그재그','ABC마트','오프라인','기타'].map(function(s){return '<option>'+s+'</option>';}).join('')+
       '</select>'+
       '<button style="background:#16a34a;color:#fff;" onclick="bulkUpdateField(\'source\',document.getElementById(\'bulkSourceSel\').value,\'매입처\')">매입처 변경</button>'+
+      '<select id="bulkPlatformSel" style="'+inS+'">'+
+        '<option value="">플랫폼 선택</option>'+
+        ['크림(일반)','크림(보관)','포이즌'].map(function(s){return '<option>'+s+'</option>';}).join('')+
+      '</select>'+
+      '<button style="background:#16a34a;color:#fff;" onclick="bulkUpdateField(\'platform\',document.getElementById(\'bulkPlatformSel\').value,\'플랫폼\')">플랫폼 변경</button>'+
+      '<input type="date" id="bulkStorageDateIn" style="'+inS+'">'+
+      '<button style="background:#16a34a;color:#fff;" onclick="bulkUpdateField(\'storage_date\',document.getElementById(\'bulkStorageDateIn\').value,\'입고일\')">입고일 변경</button>'+
       '<button style="background:#555;color:#fff;" onclick="checkedItems.clear();render()">선택 해제</button>'+
     '</div>';
   }else{el.innerHTML='';}
