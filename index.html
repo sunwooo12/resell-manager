@@ -746,7 +746,9 @@ function card(it,batchNum,totalBatches){
     var profit=(it.sell_price||0)*sold-(it.buy_price||0)*sold-(it.fee||0);
     var cost=(it.buy_price||0)*sold;
     var marginRate=cost>0?Math.round(profit/cost*100):0;
+    var settle=(it.sell_price||0)*sold-(it.fee||0);
     metaItems+='<div><div class="ml">판매가 (개당)</div><div class="mv">'+(it.sell_price||0).toLocaleString()+'원</div></div>'+
+      '<div><div class="ml">정산금액</div><div class="mv">'+settle.toLocaleString()+'원</div></div>'+
       '<div><div class="ml">판매일</div><div class="mv">'+(it.sell_date||'-')+'</div></div>'+
       '<div><div class="ml">플랫폼</div><div class="mv">'+(it.platform||'-')+'</div></div>'+
       '<div><div class="ml">순수익</div><div class="mv '+(profit>=0?'g':'r')+'">'+(profit>=0?'+':'')+profit.toLocaleString()+'원</div></div>'+
