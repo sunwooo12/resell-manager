@@ -396,66 +396,54 @@ function toggleGroupItems(idStr,checked){
   });
   render();
 }
-async function bulkUpdateStatus(){
-  var sel=document.getElementById('bulkStatusSel');
-  if(!sel||!sel.value){alert('변경할 상태를 선택해주세요.');return;}
-  var status=sel.value;
-  var ids=Array.from(checkedItems);
-  if(!ids.length)return;
-  if(!confirm(ids.length+'개 항목을 "'+status+'"으로 변경하시겠어요?'))return;
-  var sy=window.scrollY;
-  for(var i=0;i<ids.length;i++){
-    var res=await sb.from('items').update({status:status}).eq('id',ids[i]);
-    if(res.error){alert('오류: '+res.error.message);return;}
-  }
-  checkedItems.clear();
-  await load();
-  window.scrollTo(0,sy);
-}
 function updateBundleBar(){
   var el=document.getElementById('bundleBarWrap');
   if(!el)return;
   if(checkedItems.size>0){
     var opts=['주문완료','배송중','보유중','발송완료','검수중','판매대기','판매완료','취소/환불'];
+    var sources=['SSG','무신사','네이버','GS SHOP','29CM','W컨셉','나이키공홈','아디다스공홈','쿠팡','롯데온','4910','에이블리','지그재그','ABC마트','오프라인','기타'];
     var inS='padding:6px 10px;border-radius:8px;border:none;font-size:13px;font-family:\'Noto Sans KR\',sans-serif;background:#333;color:#fff;cursor:pointer;';
     el.innerHTML='<div class="bundle-bar" style="flex-wrap:wrap;gap:10px;">'+
       '<span>'+checkedItems.size+'개 선택됨</span>'+
       '<button style="background:#3b82f6;color:#fff;" onclick="bundleShip()">묶음 발송</button>'+
-      '<select id="bulkStatusSel" style="'+inS+'">'+
-        '<option value="">상태 선택</option>'+
-        opts.map(function(s){return '<option>'+s+'</option>';}).join('')+
-      '</select>'+
-      '<button style="background:#16a34a;color:#fff;" onclick="bulkUpdateStatus()">변경</button>'+
       '<span style="width:1px;height:20px;background:#444;display:inline-block;"></span>'+
+      '<select id="bulkStatusSel" style="'+inS+'"><option value="">상태 선택</option>'+opts.map(function(s){return '<option>'+s+'</option>';}).join('')+'</select>'+
       '<input type="date" id="bulkDateIn" style="'+inS+'">'+
-      '<button style="background:#16a34a;color:#fff;" onclick="bulkUpdateField(\'buy_date\',document.getElementById(\'bulkDateIn\').value,\'매입일\')">매입일 변경</button>'+
       '<input type="number" id="bulkPriceIn" placeholder="매입가" style="'+inS+'width:90px;">'+
-      '<button style="background:#16a34a;color:#fff;" onclick="bulkUpdateField(\'buy_price\',document.getElementById(\'bulkPriceIn\').value,\'매입가\')">매입가 변경</button>'+
-      '<select id="bulkSourceSel" style="'+inS+'">'+
-        '<option value="">매입처 선택</option>'+
-        ['SSG','무신사','네이버','GS SHOP','29CM','W컨셉','나이키공홈','아디다스공홈','쿠팡','롯데온','4910','에이블리','지그재그','ABC마트','오프라인','기타'].map(function(s){return '<option>'+s+'</option>';}).join('')+
-      '</select>'+
-      '<button style="background:#16a34a;color:#fff;" onclick="bulkUpdateField(\'source\',document.getElementById(\'bulkSourceSel\').value,\'매입처\')">매입처 변경</button>'+
-      '<select id="bulkPlatformSel" style="'+inS+'">'+
-        '<option value="">플랫폼 선택</option>'+
-        ['크림(일반)','크림(보관)','포이즌'].map(function(s){return '<option>'+s+'</option>';}).join('')+
-      '</select>'+
-      '<button style="background:#16a34a;color:#fff;" onclick="bulkUpdateField(\'platform\',document.getElementById(\'bulkPlatformSel\').value,\'플랫폼\')">플랫폼 변경</button>'+
+      '<select id="bulkSourceSel" style="'+inS+'"><option value="">매입처 선택</option>'+sources.map(function(s){return '<option>'+s+'</option>';}).join('')+'</select>'+
+      '<select id="bulkPlatformSel" style="'+inS+'"><option value="">플랫폼 선택</option>'+['크림(일반)','크림(보관)','포이즌'].map(function(s){return '<option>'+s+'</option>';}).join('')+'</select>'+
       '<input type="date" id="bulkStorageDateIn" style="'+inS+'">'+
-      '<button style="background:#16a34a;color:#fff;" onclick="bulkUpdateField(\'storage_date\',document.getElementById(\'bulkStorageDateIn\').value,\'입고일\')">입고일 변경</button>'+
+      '<button style="background:#16a34a;color:#fff;font-weight:700;" onclick="bulkUpdateAll()">일괄 변경</button>'+
       '<button style="background:#555;color:#fff;" onclick="checkedItems.clear();render()">선택 해제</button>'+
     '</div>';
   }else{el.innerHTML='';}
 }
-async function bulkUpdateField(field,value,label){
-  if(!value){return;}
+async function bulkUpdateAll(){
   var ids=Array.from(checkedItems);
   if(!ids.length)return;
-  var parsed=field==='buy_price'?parseInt(value):value;
-  if(field==='buy_price'&&(!parsed||parsed<=0)){return;}
-  if(!confirm(ids.length+'개 항목의 '+label+'을(를) 변경하시겠어요?'))return;
+  var update={};
+  var status=document.getElementById('bulkStatusSel').value;
+  var buyDate=document.getElementById('bulkDateIn').value;
+  var buyPrice=document.getElementById('bulkPriceIn').value;
+  var source=document.getElementById('bulkSourceSel').value;
+  var platform=document.getElementById('bulkPlatformSel').value;
+  var storageDate=document.getElementById('bulkStorageDateIn').value;
+  if(status)update.status=status;
+  if(buyDate)update.buy_date=buyDate;
+  if(buyPrice&&parseInt(buyPrice)>0)update.buy_price=parseInt(buyPrice);
+  if(source)update.source=source;
+  if(platform)update.platform=platform;
+  if(storageDate)update.storage_date=storageDate;
+  if(!Object.keys(update).length){alert('변경할 항목을 하나 이상 입력해주세요.');return;}
+  var labels=[];
+  if(update.status)labels.push('상태: '+update.status);
+  if(update.buy_date)labels.push('매입일: '+update.buy_date);
+  if(update.buy_price)labels.push('매입가: '+update.buy_price.toLocaleString()+'원');
+  if(update.source)labels.push('매입처: '+update.source);
+  if(update.platform)labels.push('플랫폼: '+update.platform);
+  if(update.storage_date)labels.push('입고일: '+update.storage_date);
+  if(!confirm(ids.length+'개 항목에 다음을 적용하시겠어요?\n'+labels.join('\n')))return;
   var sy=window.scrollY;
-  var update={};update[field]=parsed;
   for(var i=0;i<ids.length;i++){
     var res=await sb.from('items').update(update).eq('id',ids[i]);
     if(res.error){alert('오류: '+res.error.message);return;}
