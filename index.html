@@ -806,8 +806,8 @@ function card(it,batchNum,totalBatches){
   }else if(it.platform&&(it.status==='발송완료'||it.status==='검수중'||it.status==='판매대기'||it.status==='등록중')){
     metaItems+='<div><div class="ml">플랫폼</div><div class="mv">'+(it.platform||'-')+'</div></div>';
   }
-  // 창고보관비 — storage_start_date 기준 (판매대기 시작일)
-  if(it.platform==='크림(보관)'&&it.storage_start_date){
+  // 창고보관비 — platform=크림(보관) AND status가 판매대기/판매완료일 때만 표시
+  if(it.platform==='크림(보관)'&&it.storage_start_date&&(it.status==='판매대기'||it.status==='판매완료')){
     var sdays=calcStorageDays(it.storage_start_date);
     var sfee=calcStorageFee(it.storage_start_date);
     metaItems+='<div><div class="ml">창고보관비</div><div class="mv '+(sfee>0?'r':'g')+'">'+
@@ -1149,6 +1149,21 @@ async function updateItem(id){
   updateData.other_cost=otherCost;
   var newStatus=document.getElementById('est2'+id).value;
   if(newStatus){updateData.status=newStatus;}
+  // 상태 변경 시 해당 상태에 맞지 않는 필드 자동 정리
+  if(newStatus){
+    var preShip=['주문완료','배송중','보유중'];
+    var prePending=['주문완료','배송중','보유중','발송완료','검수중'];
+    if(preShip.indexOf(newStatus)!==-1){
+      // 발송 전 상태: 플랫폼·입고일·판매대기시작일·배송비 초기화
+      updateData.platform=null;
+      updateData.storage_date=null;
+      updateData.storage_start_date=null;
+      updateData.shipping_cost=0;
+    } else if(prePending.indexOf(newStatus)!==-1){
+      // 발송완료·검수중: 판매대기 시작일만 초기화
+      updateData.storage_start_date=null;
+    }
+  }
   // 판매가·정산금액 모두 지우면 판매 취소로 간주 → 보유중 복귀 + 판매 정보 초기화
   if(item&&item.status==='판매완료'&&!sellPrice&&!settle){
     updateData.status='보유중';
