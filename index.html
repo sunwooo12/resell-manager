@@ -360,6 +360,7 @@ function go(i){
     document.getElementById(secs[j]).className='sec'+(i===j?' on':'');
   });
   if(i===0)load();
+  if(i===1){var _fd=document.getElementById('fd');if(!_fd.value)_fd.value=new Date().toISOString().split('T')[0];}
   if(i===2)loadStats();
   if(i===4)loadAnalysis();
   if(i===3){
@@ -765,7 +766,7 @@ function buildEditForm(it,ekey){
       '<div style="grid-column:1/-1"><div id="eprev'+it.id+'" style="display:none;background:#f8f9fa;border-radius:8px;padding:12px 16px;display:flex;gap:20px;align-items:center;flex-wrap:wrap;"></div></div>'+
       '<div><div class="il">등록 플랫폼</div><select id="epf'+it.id+'" onchange="onPlatformChange(\'epf'+it.id+'\',\'epfsd'+it.id+'\')" style="'+s+'"><option value="">-</option>'+selOpts(PLATFORMS,it.platform||'')+'</select></div>'+
       '<div><div class="il">상태 변경</div><select id="est2'+it.id+'" style="'+s+'">'+selOpts(['주문완료','보유중','발송완료','판매대기','판매완료','취소/환불','등록중'],it.status)+'</select></div>'+
-      '<div id="epfsd'+it.id+'" style="'+(it.platform==='크림(보관)'?'':'display:none;')+'"><div class="il">입고일 (크림 창고)</div><input type="date" id="esd2'+it.id+'" value="'+(it.storage_date||'')+'" style="'+s+'"></div>'+
+      '<div id="epfsd'+it.id+'" style="'+(it.platform==='크림(보관)'?'':'display:none;')+'"><div class="il">입고일 (크림 창고)</div><input type="date" id="esd2'+it.id+'" value="'+(it.storage_date||(it.platform==='크림(보관)'?new Date().toISOString().split('T')[0]:''))+'" style="'+s+'"></div>'+
       '<div><div class="il">배송비 (개당)</div><input type="number" id="esc'+it.id+'" value="'+(it.shipping_cost||'')+'" style="'+s+'" placeholder="0"></div>'+
       '<div><div class="il">기타비용</div><input type="number" id="eoc'+it.id+'" value="'+(it.other_cost||'')+'" style="'+s+'" placeholder="0"></div>'+
       '<div style="grid-column:1/-1"><div class="il">주문내역 URL</div><input type="url" id="eurl'+it.id+'" value="'+esc(it.order_url)+'" style="'+s+'" placeholder="https://..."></div>'+
@@ -998,6 +999,7 @@ async function addItem(){
   if(res.error){alert('등록 실패: '+res.error.message);return;}
   ['fn','fbr','fz','fpc','fp','fm','furl'].forEach(function(id){document.getElementById(id).value='';});
   document.getElementById('fq').value='1';
+  document.getElementById('fd').value=new Date().toISOString().split('T')[0];
   alert('매입 등록 완료!');
   go(0);
 }
