@@ -353,7 +353,7 @@ ALTER TABLE items ADD COLUMN IF NOT EXISTS other_cost INT DEFAULT 0;</div>
 
 </main>
 <script>
-var sb=null,items=[],cf='all',pf='all',oid=null,expanded=new Set(),checkedItems=new Set(),searchQ='',sortAsc=true,dateFilterMode='all',dateFilterCustom='';
+var sb=null,items=[],cf='all',pf='all',oid=null,expanded=new Set(),checkedItems=new Set(),searchQ='',sortAsc=true,dateFilterMode='all',dateFilterCustom='',grpExpanded=new Set();
 var PLATFORMS=['크림(일반)','크림(보관)','포이즌','기타'];
 var tabs=['t0','t1','t2','t3','t4'],secs=['s0','s1','s2','s3','s4'];
 
@@ -541,6 +541,11 @@ function toggleCard(id){
   render();
 }
 
+function toggleGroup(k){
+  if(grpExpanded.has(k)){grpExpanded.delete(k);}else{grpExpanded.add(k);}
+  render();
+}
+
 async function load(){
   if(!sb){document.getElementById('itemList').innerHTML='<div class="empty">설정 탭에서 Supabase 키를 먼저 입력해주세요.</div>';return;}
   document.getElementById('itemList').innerHTML='<div class="loading">불러오는 중...</div>';
@@ -667,17 +672,25 @@ function render(){
     var hdrName=(rep.brand?rep.brand+' ':'')+rep.name+(rep.size?' '+rep.size:'');
     var grpIdStr=grp.map(function(i){return i.id;}).join(',');
     var allChecked=grp.every(function(i){return checkedItems.has(String(i.id));});
+    var multi=grp.length>1;
+    var isOpen=!multi||grpExpanded.has(k);
+    var safeKey=k.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    var prices=grp.map(function(i){return i.buy_price||0;});
+    var minP=Math.min.apply(null,prices),maxP=Math.max.apply(null,prices);
+    var priceStr=minP===maxP?minP.toLocaleString()+'원':minP.toLocaleString()+'~'+maxP.toLocaleString()+'원';
+    var arrow=multi?'<span style="color:#7c9cbf;font-size:11px;margin-left:6px;">'+(isOpen?'▲':'▼')+'</span>':'';
     return '<div class="group-wrap">'+
-      '<div class="group-hdr">'+
+      '<div class="group-hdr"'+(multi?' onclick="toggleGroup(\''+safeKey+'\')" style="cursor:pointer;"':'')+'>'+
         '<input type="checkbox"'+(allChecked?' checked':'')+
-          ' onclick="toggleGroupItems(\''+grpIdStr+'\',this.checked)" style="width:16px;height:16px;cursor:pointer;flex-shrink:0;margin-right:10px;">'+
-        '<span class="group-hdr-name">'+hdrName+'</span>'+
+          ' onclick="event.stopPropagation();toggleGroupItems(\''+grpIdStr+'\',this.checked)" style="width:16px;height:16px;cursor:pointer;flex-shrink:0;margin-right:10px;">'+
+        '<span class="group-hdr-name">'+hdrName+arrow+'</span>'+
         '<div style="display:flex;align-items:center;gap:12px;font-size:12px;color:#888;">'+
+          '<span style="color:#6b7280;">'+priceStr+'</span>'+
           '<span>전체 <b style="color:#374151;">'+totalQty+'</b>개</span>'+
           '<span>판매완료 <b style="color:#374151;">'+totalSold+'</b>개</span>'+
         '</div>'+
       '</div>'+
-      grp.map(function(it,idx){return card(it,idx+1,grp.length);}).join('')+
+      (isOpen?grp.map(function(it,idx){return card(it,idx+1,grp.length);}).join(''):'')+
       '</div>';
   }
 
