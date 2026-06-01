@@ -156,10 +156,8 @@ button.dfb.on{background:#1a1a1a;color:#fff;border-color:#1a1a1a;}
     <div class="toolbar">
       <button class="fb on" onclick="filt('all',this)">전체</button>
       <button class="fb" onclick="filt('주문완료',this)">주문완료</button>
-      <button class="fb" onclick="filt('배송중',this)">배송중</button>
       <button class="fb" onclick="filt('보유중',this)">보유중</button>
       <button class="fb" onclick="filt('발송완료',this)">발송완료</button>
-      <button class="fb" onclick="filt('검수중',this)">검수중</button>
       <button class="fb" onclick="filt('판매대기',this)">판매대기</button>
       <button class="fb" onclick="filt('판매완료',this)">판매완료</button>
       <button class="fb" onclick="filt('취소/환불',this)">취소/환불</button>
@@ -231,7 +229,6 @@ button.dfb.on{background:#1a1a1a;color:#fff;border-color:#1a1a1a;}
         <div><label>매입 상태</label>
           <select id="fst">
             <option value="주문완료">주문완료 (방금 주문)</option>
-            <option value="배송중">배송중</option>
             <option value="보유중">보유중 (수령 완료)</option>
           </select>
         </div>
@@ -415,7 +412,7 @@ function updateBundleBar(){
   var el=document.getElementById('bundleBarWrap');
   if(!el)return;
   if(checkedItems.size>0){
-    var opts=['주문완료','배송중','보유중','발송완료','검수중','판매대기','판매완료','취소/환불'];
+    var opts=['주문완료','보유중','발송완료','판매대기','판매완료','취소/환불'];
     var sources=['SSG','무신사','네이버','GS SHOP','29CM','W컨셉','나이키공홈','아디다스공홈','쿠팡','롯데온','4910','에이블리','지그재그','ABC마트','오프라인','기타'];
     var inS='padding:6px 10px;border-radius:8px;border:none;font-size:13px;font-family:\'Noto Sans KR\',sans-serif;background:#333;color:#fff;cursor:pointer;';
     el.innerHTML='<div class="bundle-bar" style="flex-wrap:wrap;gap:10px;">'+
@@ -553,6 +550,19 @@ async function load(){
   var res=await sb.from('items').select('*').order('buy_date',{ascending:true}).order('created_at',{ascending:true});
   if(res.error){document.getElementById('itemList').innerHTML='<div class="empty">데이터를 불러오지 못했어요.</div>';return;}
   items=res.data||[];
+
+  // 1회 마이그레이션: 배송중→보유중, 검수중→판매대기
+  var migrItems=items.filter(function(i){return i.status==='배송중'||i.status==='검수중';});
+  if(migrItems.length){
+    var mToday=new Date().toISOString().split('T')[0];
+    await Promise.all(migrItems.map(function(mi){
+      var upd=mi.status==='배송중'?{status:'보유중'}:{status:'판매대기'};
+      if(mi.status==='검수중'&&!mi.storage_start_date) upd.storage_start_date=mToday;
+      return sb.from('items').update(upd).eq('id',mi.id);
+    }));
+    var res2=await sb.from('items').select('*').order('buy_date',{ascending:true}).order('created_at',{ascending:true});
+    if(!res2.error) items=res2.data||[];
+  }
 
   var total=items.length;
   var holdQty=items.filter(function(i){return i.status==='보유중';}).reduce(function(s,i){
@@ -754,7 +764,7 @@ function buildEditForm(it,ekey){
       '<div><div class="il">정산금액 (합계)</div><input type="number" id="est'+it.id+'" value="'+settleVal+'" style="'+s+'" placeholder="190000" oninput="calcEditPreview(\''+it.id+'\','+it.buy_price+','+sq+')"></div>'+
       '<div style="grid-column:1/-1"><div id="eprev'+it.id+'" style="display:none;background:#f8f9fa;border-radius:8px;padding:12px 16px;display:flex;gap:20px;align-items:center;flex-wrap:wrap;"></div></div>'+
       '<div><div class="il">등록 플랫폼</div><select id="epf'+it.id+'" onchange="onPlatformChange(\'epf'+it.id+'\',\'epfsd'+it.id+'\')" style="'+s+'"><option value="">-</option>'+selOpts(PLATFORMS,it.platform||'')+'</select></div>'+
-      '<div><div class="il">상태 변경</div><select id="est2'+it.id+'" style="'+s+'">'+selOpts(['주문완료','배송중','보유중','발송완료','검수중','판매대기','판매완료','취소/환불','등록중'],it.status)+'</select></div>'+
+      '<div><div class="il">상태 변경</div><select id="est2'+it.id+'" style="'+s+'">'+selOpts(['주문완료','보유중','발송완료','판매대기','판매완료','취소/환불','등록중'],it.status)+'</select></div>'+
       '<div id="epfsd'+it.id+'" style="'+(it.platform==='크림(보관)'?'':'display:none;')+'"><div class="il">입고일 (크림 창고)</div><input type="date" id="esd2'+it.id+'" value="'+(it.storage_date||'')+'" style="'+s+'"></div>'+
       '<div><div class="il">배송비 (개당)</div><input type="number" id="esc'+it.id+'" value="'+(it.shipping_cost||'')+'" style="'+s+'" placeholder="0"></div>'+
       '<div><div class="il">기타비용</div><input type="number" id="eoc'+it.id+'" value="'+(it.other_cost||'')+'" style="'+s+'" placeholder="0"></div>'+
@@ -769,11 +779,9 @@ function buildEditForm(it,ekey){
 
 function statusBadge(s){
   if(s==='주문완료')return 'bO';
-  if(s==='배송중')return 'bT';
   if(s==='보유중')return 'bY';
   if(s==='등록중')return 'bB';
   if(s==='발송완료')return 'bP';
-  if(s==='검수중')return 'bI';
   if(s==='판매대기')return 'bW';
   if(s==='취소/환불')return 'bX';
   return 'bG';
@@ -817,7 +825,7 @@ function card(it,batchNum,totalBatches){
       '<div><div class="ml">플랫폼</div><div class="mv">'+(it.platform||'-')+'</div></div>'+
       '<div><div class="ml">순수익</div><div class="mv '+(profit>=0?'g':'r')+'">'+(profit>=0?'+':'')+profit.toLocaleString()+'원</div></div>'+
       '<div><div class="ml">마진율</div><div class="mv '+(marginRate>=0?'g':'r')+'">'+(marginRate>=0?'+':'')+marginRate+'%</div></div>';
-  }else if(it.platform&&(it.status==='발송완료'||it.status==='검수중'||it.status==='판매대기'||it.status==='등록중')){
+  }else if(it.platform&&(it.status==='발송완료'||it.status==='판매대기'||it.status==='등록중')){
     metaItems+='<div><div class="ml">플랫폼</div><div class="mv">'+(it.platform||'-')+'</div></div>';
   }
   // 창고보관비 — platform=크림(보관) AND status가 판매대기/판매완료일 때만 표시
@@ -871,9 +879,6 @@ function card(it,batchNum,totalBatches){
     '<button class="btnP" onclick="confSell(\''+it.id+'\','+remain+')">판매 확정</button></div>';
 
   if(it.status==='주문완료'){
-    acts+='<button class="btn" onclick="confDeliver(\''+it.id+'\')">배송 확인</button>'+
-          cancelBtn+'<button class="btnD" onclick="del(\''+it.id+'\')">삭제</button>';
-  }else if(it.status==='배송중'){
     acts+='<button class="btnP" onclick="confReceive(\''+it.id+'\')">입고 확인</button>'+
           cancelBtn+'<button class="btnD" onclick="del(\''+it.id+'\')">삭제</button>';
   }else if(it.status==='보유중'||it.status==='등록중'){
@@ -893,16 +898,13 @@ function card(it,batchNum,totalBatches){
       '<button class="btnP" onclick="confShipWithPlatform(\''+it.id+'\')">발송 확정</button></div>';
   }else if(it.status==='발송완료'){
     if(it.platform==='크림(보관)'){
-      acts+='<button class="btnV" onclick="confInspect(\''+it.id+'\')">검수 완료</button>'+
+      acts+='<button class="btnP" onclick="confWait(\''+it.id+'\')">판매대기 등록</button>'+
             '<button class="btnD" onclick="del(\''+it.id+'\')">삭제</button>';
     }else{
       acts+='<button class="btnP" onclick="tog(\''+sellKey+'\')">판매 확정</button>'+
             '<button class="btnD" onclick="del(\''+it.id+'\')">삭제</button>';
       inlineForm+=sellForm;
     }
-  }else if(it.status==='검수중'){
-    acts+='<button class="btnP" onclick="confWait(\''+it.id+'\')">판매대기 등록</button>'+
-          '<button class="btnD" onclick="del(\''+it.id+'\')">삭제</button>';
   }else if(it.status==='판매대기'){
     acts+='<button class="btnP" onclick="tog(\''+sellKey+'\')">판매 확정</button>'+
           '<button class="btnD" onclick="del(\''+it.id+'\')">삭제</button>';
@@ -1010,25 +1012,16 @@ async function confShipWithPlatform(id){
   oid=null;load();
 }
 
-async function confInspect(id){
-  var res=await sb.from('items').update({status:'검수중'}).eq('id',id);
-  if(res.error){alert('오류: '+res.error.message);return;}
-  load();
-}
-
 async function confWait(id){
   var today=new Date().toISOString().split('T')[0];
-  var res=await sb.from('items').update({status:'판매대기',storage_start_date:today}).eq('id',id);
+  var item=items.find(function(i){return i.id==id;});
+  var upd={status:'판매대기'};
+  if(!item||!item.storage_start_date) upd.storage_start_date=today;
+  var res=await sb.from('items').update(upd).eq('id',id);
   if(res.error){alert('오류: '+res.error.message);return;}
   load();
 }
 
-
-async function confDeliver(id){
-  var res=await sb.from('items').update({status:'배송중'}).eq('id',id);
-  if(res.error){alert('오류: '+res.error.message);return;}
-  load();
-}
 
 async function confReceive(id){
   var res=await sb.from('items').update({status:'보유중'}).eq('id',id);
@@ -1165,8 +1158,8 @@ async function updateItem(id){
   if(newStatus){updateData.status=newStatus;}
   // 상태 변경 시 해당 상태에 맞지 않는 필드 자동 정리
   if(newStatus){
-    var preShip=['주문완료','배송중','보유중'];
-    var prePending=['주문완료','배송중','보유중','발송완료','검수중'];
+    var preShip=['주문완료','보유중'];
+    var prePending=['주문완료','보유중','발송완료'];
     if(preShip.indexOf(newStatus)!==-1){
       // 발송 전 상태: 플랫폼·입고일·판매대기시작일·배송비 초기화
       updateData.platform=null;
@@ -1179,7 +1172,7 @@ async function updateItem(id){
       updateData.fee=0;
       updateData.sell_date=null;
     } else if(prePending.indexOf(newStatus)!==-1){
-      // 발송완료·검수중: 판매대기 시작일만 초기화
+      // 발송완료: 판매대기 시작일만 초기화
       updateData.storage_start_date=null;
     }
   }
