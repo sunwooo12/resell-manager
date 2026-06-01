@@ -548,7 +548,8 @@ function toggleGroup(k){
 
 async function load(){
   if(!sb){document.getElementById('itemList').innerHTML='<div class="empty">설정 탭에서 Supabase 키를 먼저 입력해주세요.</div>';return;}
-  document.getElementById('itemList').innerHTML='<div class="loading">불러오는 중...</div>';
+  var el=document.getElementById('itemList');
+  if(!el.children.length)el.innerHTML='<div class="loading">불러오는 중...</div>';
   var res=await sb.from('items').select('*').order('buy_date',{ascending:true}).order('created_at',{ascending:true});
   if(res.error){document.getElementById('itemList').innerHTML='<div class="empty">데이터를 불러오지 못했어요.</div>';return;}
   items=res.data||[];
