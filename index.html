@@ -1029,22 +1029,31 @@ async function confCancel(id){
 }
 
 
+function computeFee(sellPrice,soldQty,settleTotal){
+  return settleTotal>0?sellPrice*soldQty-settleTotal:0;
+}
+
 async function confSell(id,maxRemain){
   var sellQty=parseInt(document.getElementById('sq'+id).value)||maxRemain;
   var sp=parseInt(document.getElementById('sp'+id).value);
   var st=parseInt(document.getElementById('st'+id).value)||0;
-  var fee=st>0?(sp*sellQty-st):0;
   var sd=document.getElementById('sd'+id).value;
   if(!sp||!sd){alert('판매가와 판매일을 입력해주세요.');return;}
   if(sellQty<1||sellQty>maxRemain){alert('판매 수량을 확인해주세요.');return;}
 
   var item=items.find(function(i){return i.id==id;});
-  var newSold=(item.sold_quantity||0)+sellQty;
+  var prevSold=item.sold_quantity||0;
+  var newSold=prevSold+sellQty;
   var totalQty=item.quantity||1;
   var newStatus=newSold>=totalQty?'판매완료':item.status;
 
+  // 이전 정산 합계 복원 후 이번 배치 합산 → SET (누적 +=  제거)
+  var prevSettle=(item.sell_price||0)*prevSold-(item.fee||0);
+  var totalSettle=prevSettle+st;
+  var newFee=computeFee(sp,newSold,totalSettle);
+
   var res=await sb.from('items').update({
-    status:newStatus,sell_price:sp,fee:(item.fee||0)+fee,sell_date:sd,sold_quantity:newSold
+    status:newStatus,sell_price:sp,fee:newFee,sell_date:sd,sold_quantity:newSold
   }).eq('id',id);
   if(res.error){alert('오류: '+res.error.message);return;}
   oid=null;load();
@@ -1092,7 +1101,9 @@ async function updateItem(id){
   var settle=parseInt(document.getElementById('est'+id).value)||0;
   if(!name||!price||!date){alert('상품명, 매입가, 매입일은 필수예요!');return;}
   var item=items.find(function(i){return i.id==id;});
-  var sq=item?item.sold_quantity||0:0;
+  var origSq=item?item.sold_quantity||0:0;
+  var origSellPrice=item?item.sell_price||0:0;
+  var origSettle=origSellPrice*origSq-(item?item.fee||0:0);
   var updateData={
     name:name,brand:brand,category:category,size:size,product_code:productCode,
     source:source,buy_price:price,quantity:qty,buy_date:date,note:note,order_url:orderUrl
@@ -1101,9 +1112,14 @@ async function updateItem(id){
   var storageDate=platform==='크림(보관)'?(document.getElementById('esd2'+id)||{}).value||null:null;
   var shippingCost=parseInt(document.getElementById('esc'+id).value)||0;
   var otherCost=parseInt(document.getElementById('eoc'+id).value)||0;
-  if(sellPrice>0){updateData.sell_price=sellPrice;}
+  // 판매가·정산금액이 실제로 바뀐 경우에만 덮어쓰기
   if(sellDate){updateData.sell_date=sellDate;}
-  if(sellPrice>0){updateData.fee=settle>0?sellPrice*sq-settle:0;}
+  if(sellPrice>0){
+    updateData.sell_price=sellPrice;
+    if(sellPrice!==origSellPrice||settle!==origSettle){
+      updateData.fee=computeFee(sellPrice,origSq,settle);
+    }
+  }
   if(platform){updateData.platform=platform;}
   updateData.storage_date=storageDate;
   updateData.shipping_cost=shippingCost;
