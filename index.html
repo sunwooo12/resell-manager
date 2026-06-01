@@ -1173,6 +1173,11 @@ async function updateItem(id){
       updateData.storage_date=null;
       updateData.storage_start_date=null;
       updateData.shipping_cost=0;
+      // 판매 정보 초기화 (판매대기/판매완료 이전 상태로 되돌릴 때)
+      updateData.sold_quantity=0;
+      updateData.sell_price=null;
+      updateData.fee=0;
+      updateData.sell_date=null;
     } else if(prePending.indexOf(newStatus)!==-1){
       // 발송완료·검수중: 판매대기 시작일만 초기화
       updateData.storage_start_date=null;
