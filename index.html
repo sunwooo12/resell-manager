@@ -1008,12 +1008,15 @@ function extractProductCodes(text){
   return [...new Set(found)];
 }
 
+function normCode(s){return (s||'').toLowerCase().replace(/[-_ /]/g,'');}
+
 function findOrderedItems(codes){
+  var normCodes=codes.map(normCode);
   var results=[];
-  codes.forEach(function(c){
+  normCodes.forEach(function(nc){
     items.forEach(function(it){
       if(it.status==='주문완료'&&it.product_code&&
-         it.product_code.toUpperCase().indexOf(c)!==-1){
+         normCode(it.product_code).indexOf(nc)!==-1){
         if(!results.find(function(r){return r.id===it.id;}))results.push(it);
       }
     });
