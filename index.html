@@ -170,6 +170,8 @@ button.dfb.on{background:#1a1a1a;color:#fff;border-color:#1a1a1a;}
         <option>신발</option><option>의류</option><option>잡화</option><option>액세서리</option><option>기타</option>
       </select>
       <button class="fb" id="sortBtn" onclick="sortAsc=!sortAsc;document.getElementById('sortBtn').textContent=sortAsc?'오래된순 ↑':'최신순 ↓';render()">오래된순 ↑</button>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
       <button class="ab" onclick="go(1)">+ 매입 등록</button>
       <button class="ab" style="background:#7c3aed;" onclick="document.getElementById('orderFile').click()">📷 주문내역 등록</button>
       <button class="ab" style="background:#0d9488;" onclick="document.getElementById('scanFile').click()">📷 입고 스캔</button>
