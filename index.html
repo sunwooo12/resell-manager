@@ -119,7 +119,7 @@ button.dfb.on{background:#1a1a1a;color:#fff;border-color:#1a1a1a;}
 .bundle-bar{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1a1a1a;color:#fff;padding:14px 24px;border-radius:14px;display:flex;align-items:center;gap:14px;box-shadow:0 4px 24px rgba(0,0,0,0.28);z-index:100;font-size:14px;white-space:nowrap;}
 .bundle-bar button{padding:8px 18px;border-radius:8px;border:none;font-size:13px;font-family:'Noto Sans KR',sans-serif;cursor:pointer;font-weight:700;}
 .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:200;display:flex;align-items:center;justify-content:center;}
-.modal-box{background:#fff;border-radius:14px;padding:28px;width:340px;box-shadow:0 8px 32px rgba(0,0,0,0.2);}
+.modal-box{background:#fff;border-radius:14px;padding:28px;width:340px;box-shadow:0 8px 32px rgba(0,0,0,0.2);max-height:85vh;overflow-y:auto;}
 .modal-title{font-size:16px;font-weight:700;margin-bottom:20px;}
 .modal-field{margin-bottom:14px;}
 .modal-field .il{margin-bottom:4px;}
@@ -1345,9 +1345,12 @@ function showScanResult(codes){
     _scanMatchedIds=matched.map(function(i){return i.id;});
     var rows=matched.map(function(it,i){return renderScanItem(it,i,true);}).join('');
     openScanModal(
-      '<p><b>'+matched.length+'개 매칭</b> — 입고 처리할 항목을 선택하세요 (FIFO 순):</p>'+rows,
-      '<button class="sb" style="background:#0d9488;" onclick="execBulkScanReceive()">선택 입고 처리</button>'+
-      '<button class="cb" onclick="closeScanModal()">취소</button>');
+      '<p><b>'+matched.length+'개 매칭</b> — 체크 후 아래 버튼을 누르세요 (FIFO 순):</p>'+
+      '<div style="display:flex;gap:8px;margin-bottom:12px;">'+
+        '<button class="sb" style="background:#0d9488;flex:1;" onclick="execBulkScanReceive()">✅ 선택 입고 처리</button>'+
+        '<button class="cb" onclick="closeScanModal()">취소</button>'+
+      '</div>'+rows,
+      '');
   }
 }
 
