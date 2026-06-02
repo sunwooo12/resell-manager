@@ -1149,7 +1149,7 @@ function renderScanItem(it,i,showCheck){
   var receiveBtn=!showCheck&&it.status==='주문완료'?
     '<button class="sb" style="background:#0d9488;padding:5px 14px;font-size:12px;margin-top:6px;" '+
     'onclick="applyScanReceive([\''+it.id+'\'])">이 항목 입고 처리</button>':'';
-  return '<'+(showCheck?'label':'div')+' style="display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid #f0f0f0;">'+
+  return '<'+(showCheck?'label':'div')+' style="display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid #f0f0f0;'+(showCheck?'cursor:pointer;':'')+'">'+
     chk+
     '<span style="flex:1;">'+
       '<b>'+scanLabel(it)+'</b>'+
@@ -1184,6 +1184,7 @@ function ocrTokenize(text){
 
 function looksLikeCode(s){
   var u=s.toUpperCase();
+  if(!/[0-9]/.test(u))return false; // 숫자 없는 순수 단어 제외
   return /^[A-Z]{1,4}[-\/]?[0-9]{3,6}([-\/][A-Z0-9]{1,6})?$/.test(u)||
          /^[0-9]{5,6}-[0-9]{2,4}$/.test(u)||
          /^[A-Z][A-Z0-9]{5,14}$/.test(u);
@@ -1220,14 +1221,19 @@ function showOcrPicker(raw){
       label.replace(/</g,'&lt;').replace(/>/g,'&gt;')+'</button>';
   }
 
+  // 노이즈 필터: 3자 미만, 숫자·문자 없는 조각 제외
+  var cleanOthers=others.filter(function(t){
+    return t.length>=3&&/[a-zA-Z0-9가-힣]/.test(t)&&!/^[\W_]+$/.test(t);
+  });
   var candHtml=cands.map(function(c){return chip(c.val,c.val,true);}).join('');
-  var otherHtml=others.map(function(t){return chip(t,t,false);}).join('');
+  var otherHtml=cleanOthers.map(function(t){return chip(t,t,false);}).join('');
 
   var body=
     '<p style="font-size:12px;color:#6b7280;margin-bottom:8px;">품번을 탭해서 선택하고, 필요하면 아래에서 수정하세요.</p>'+
     (candHtml?'<div style="margin-bottom:8px;"><span style="font-size:11px;color:#3b82f6;font-weight:600;">품번 후보 (OCR 보정 적용)</span><br>'+candHtml+'</div>':'')+
-    (otherHtml?'<div style="margin-bottom:12px;"><span style="font-size:11px;color:#9ca3af;">전체 텍스트 조각</span><br>'+otherHtml+'</div>':
-      '<p style="font-size:12px;color:#9ca3af;margin-bottom:12px;">인식된 텍스트가 없습니다.</p>')+
+    (otherHtml
+      ?'<details style="margin-bottom:12px;"><summary style="cursor:pointer;font-size:12px;color:#9ca3af;padding:4px 0;">전체 텍스트 보기 ('+cleanOthers.length+'개)</summary><div style="margin-top:6px;">'+otherHtml+'</div></details>'
+      :'<p style="font-size:12px;color:#9ca3af;margin-bottom:12px;">인식된 텍스트가 없습니다.</p>')+
     '<div style="font-size:12px;font-weight:600;color:#374151;margin-bottom:4px;">선택 / 직접 입력:</div>'+
     '<input id="_sci" type="text" placeholder="품번 선택 또는 직접 입력" autocomplete="off" '+
     'style="width:100%;padding:10px;border:1.5px solid #3b82f6;border-radius:8px;font-size:14px;font-family:monospace;box-sizing:border-box;">';
@@ -1247,6 +1253,27 @@ function confirmOcrCode(){
   if(!val){alert('품번을 선택하거나 입력해주세요.');return;}
   _scanCodes=[val];
   showScanResult(_scanCodes);
+}
+
+function goNewRegister(code){
+  closeScanModal();
+  if(code)document.getElementById('fpc').value=code;
+  go(1);
+}
+
+function showAlreadyReceived(receivedItems,code){
+  var rows=receivedItems.slice(0,5).map(function(it){
+    return '<div style="padding:8px 0;border-bottom:1px solid #f0f0f0;">'+
+      '<b>'+scanLabel(it)+'</b>'+
+      '<div style="font-size:11px;color:#9ca3af;margin-top:2px;">'+scanDetail(it)+'</div></div>';
+  }).join('');
+  var safeCode=(code||'').replace(/'/g,"\\'");
+  openScanModal(
+    '<p style="font-size:15px;font-weight:700;color:#0d9488;margin-bottom:6px;">✅ 이미 입고된 상품이에요</p>'+
+    '<p style="font-size:12px;color:#6b7280;margin-bottom:10px;">이 품번은 이미 보유중 상태입니다.</p>'+
+    '<div>'+rows+'</div>',
+    '<button class="sb" style="background:#6b7280;" onclick="goNewRegister(\''+safeCode+'\')">새로 매입 등록</button>'+
+    '<button class="cb" onclick="closeScanModal()">확인</button>');
 }
 // ────────────────────────────────────────────────────────
 
@@ -1268,6 +1295,14 @@ function showNoMatchResult(codes){
 function showScanResult(codes){
   var matched=findOrderedItems(codes);
   if(matched.length===0){
+    // 이미 보유중인 같은 품번이 있으면 안내
+    var similar=findSimilarItems(codes);
+    var alreadyHeld=similar.filter(function(it){return it.status==='보유중';});
+    var hasOrdered=similar.some(function(it){return it.status==='주문완료';});
+    if(alreadyHeld.length>0&&!hasOrdered){
+      showAlreadyReceived(alreadyHeld,codes[0]||'');
+      return;
+    }
     if(codes.length>1){
       var btns=codes.map(function(c){
         return '<button onclick="showScanResult([\''+ c.replace(/'/g,"\\'")+'\'])" '+
