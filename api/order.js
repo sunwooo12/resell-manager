@@ -11,14 +11,16 @@ export default async function handler(req, res) {
 
   const today = new Date().toISOString().split('T')[0];
   const prompt =
-    '이 온라인 쇼핑몰 주문내역(SSG/무신사/네이버/나이키공홈/29CM/롯데 등) 캡처에서 ' +
-    '개별 상품 라인만 추출해 JSON 배열로만 반환. 각 항목 키:\n' +
-    '{"name":"","brand":"","size":"","product_code":"","source":"","buy_price":0,"quantity":1,"buy_date":"","order_url":""}.\n' +
-    'buy_price: 개당 가격 정수(콤마·원 제거). 합계만 있으면 수량으로 나눠 개당으로.\n' +
-    'buy_date: YYYY-MM-DD. 없으면 ' + today + '.\n' +
-    '⚠️ 다음은 항목으로 만들지 말 것: 합계·총금액·총수량·배송비·쿠폰할인·주문번호·요약줄·헤더줄.\n' +
+    '이 온라인 쇼핑몰 주문내역(SSG/무신사/네이버/나이키공홈/29CM/롯데 등) 캡처에서\n' +
+    '아래 형식의 JSON 객체만 반환:\n' +
+    '{"total_paid":0,"items":[{"name":"","brand":"","size":"","product_code":"","source":"","list_price":0,"quantity":1,"buy_date":"","order_url":""}]}\n' +
+    '\n' +
+    '- total_paid: 할인·쿠폰·포인트 적용 후 실제 결제금액(배송비 제외). 확인 불가면 0.\n' +
+    '- list_price: 각 상품의 개당 표시 가격(할인·쿠폰 적용 전 개별 정가) 정수.\n' +
+    '- buy_date: YYYY-MM-DD. 없으면 ' + today + '.\n' +
+    '⚠️ items에 넣지 말 것: 합계·총금액·배송비·쿠폰할인·포인트·주문번호·요약줄·헤더줄.\n' +
     '상품명(name)이 없거나 실제 상품이 아닌 줄은 반드시 제외.\n' +
-    '설명 없이 JSON 배열만.';
+    '설명 없이 JSON만.';
 
   let apiRes;
   try {
@@ -78,18 +80,19 @@ export default async function handler(req, res) {
 
   const text = (claudeData.content && claudeData.content[0] && claudeData.content[0].text) || '';
 
-  const match = text.match(/\[[\s\S]*\]/);
+  // Match outermost JSON object or array
+  const match = text.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
   if (!match) {
     return res.status(200).json({
-      error: 'JSON 배열 없음 — Claude 원문을 확인하세요',
+      error: 'JSON 없음 — Claude 원문을 확인하세요',
       _claudeStatus: claudeStatus,
       _claudeRaw: text.slice(0, 500),
     });
   }
 
+  let parsed;
   try {
-    const items = JSON.parse(match[0]);
-    return res.status(200).json({ items, _claudeStatus: claudeStatus });
+    parsed = JSON.parse(match[0]);
   } catch (e) {
     return res.status(200).json({
       error: 'JSON 파싱 오류: ' + e.message,
@@ -97,4 +100,48 @@ export default async function handler(req, res) {
       _claudeRaw: text.slice(0, 400),
     });
   }
+
+  // Support both {total_paid, items:[]} and bare array (fallback)
+  const rawItems = Array.isArray(parsed) ? parsed : (Array.isArray(parsed.items) ? parsed.items : []);
+  const totalPaid = (!Array.isArray(parsed) && parsed.total_paid > 0) ? parsed.total_paid : 0;
+
+  // Filter: must have a name
+  const items = rawItems.filter(it => it && (it.name || '').trim());
+
+  // Proportional distribution of total_paid into buy_price
+  if (totalPaid > 0) {
+    const totalListCost = items.reduce((s, it) => {
+      const lp = it.list_price || it.buy_price || 0;
+      return s + lp * (it.quantity || 1);
+    }, 0);
+
+    if (totalListCost > 0 && totalPaid < totalListCost) {
+      // Distribute proportionally, then round; fix rounding remainder on largest item
+      let distributed = 0;
+      let largestIdx = 0;
+      let largestCost = 0;
+      items.forEach((it, i) => {
+        const lp = it.list_price || it.buy_price || 0;
+        const cost = lp * (it.quantity || 1);
+        const share = Math.round(totalPaid * cost / totalListCost);
+        const qty = it.quantity || 1;
+        it.buy_price = Math.round(share / qty);
+        distributed += share;
+        if (cost > largestCost) { largestCost = cost; largestIdx = i; }
+      });
+      // Absorb rounding difference in the largest item
+      const diff = totalPaid - distributed;
+      if (diff !== 0) {
+        const it = items[largestIdx];
+        it.buy_price += Math.round(diff / (it.quantity || 1));
+      }
+    } else {
+      // No discount or total_paid >= list total — use list_price as-is
+      items.forEach(it => { it.buy_price = it.list_price || it.buy_price || 0; });
+    }
+  } else {
+    items.forEach(it => { it.buy_price = it.list_price || it.buy_price || 0; });
+  }
+
+  return res.status(200).json({ items, _claudeStatus: claudeStatus });
 }
