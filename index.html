@@ -1138,6 +1138,17 @@ async function applyScanReceive(ids){
   }catch(e){alert('입고 처리 오류: '+e.message);}
 }
 
+function toggleScanSelectAll(){
+  var btn=document.getElementById('scanSelAllBtn');
+  var allChecked=_scanMatchedIds.every(function(id){
+    var el=document.getElementById('sc'+id);return el&&el.checked;
+  });
+  _scanMatchedIds.forEach(function(id){
+    var el=document.getElementById('sc'+id);if(el)el.checked=!allChecked;
+  });
+  if(btn)btn.textContent=allChecked?'전체 선택':'전체 해제';
+}
+
 function execBulkScanReceive(){
   var sel=_scanMatchedIds.filter(function(id){
     var el=document.getElementById('sc'+id);
@@ -1340,7 +1351,12 @@ function showScanResult(codes){
     _scanMatchedIds=matched.map(function(i){return i.id;});
     var rows=matched.map(function(it,i){return renderScanItem(it,i,true);}).join('');
     openScanModal(
-      '<p><b>'+matched.length+'개 매칭</b> — 체크 후 아래 버튼을 누르세요 (FIFO 순):</p>'+
+      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">'+
+        '<p style="margin:0;"><b>'+matched.length+'개 매칭</b> — FIFO 순</p>'+
+        '<button id="scanSelAllBtn" onclick="toggleScanSelectAll()" '+
+          'style="padding:4px 12px;border-radius:999px;border:1px solid #e2e0da;background:#f8f8f6;'+
+          'font-size:12px;font-family:inherit;cursor:pointer;color:#374151;">전체 선택</button>'+
+      '</div>'+
       '<div style="display:flex;gap:8px;margin-bottom:12px;">'+
         '<button class="sb" style="background:#0d9488;flex:1;" onclick="execBulkScanReceive()">✅ 선택 입고 처리</button>'+
         '<button class="cb" onclick="closeScanModal()">취소</button>'+
