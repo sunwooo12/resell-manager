@@ -1388,7 +1388,7 @@ async function runIncomingScan(input){
   openScanModal('<div style="text-align:center;color:#6b7280;">🤖 AI 품번 인식 중...</div>','');
   try{
     var b64=await resizeAndEncode(file,1500);
-    var mime=file.type||'image/jpeg';
+    var mime='image/jpeg'; // canvas.toDataURL always outputs JPEG
     var resp=await fetch('/api/scan',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
