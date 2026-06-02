@@ -198,6 +198,17 @@ button.dfb.on{background:#1a1a1a;color:#fff;border-color:#1a1a1a;}
     </div>
   </div>
   <input type="file" id="scanFile" accept="image/*" capture="environment" style="display:none;" onchange="runIncomingScan(this)">
+  <input type="file" id="orderFile" accept="image/*" style="display:none;" onchange="runOrderScan(this)">
+
+  <!-- 주문내역 캡처 모달 -->
+  <div id="orderModal" class="modal-bg" style="display:none;" onclick="if(event.target===this)closeOrderModal()">
+    <div class="modal-box" style="width:min(580px,96vw);">
+      <div class="modal-title">🛒 주문내역 캡처 등록</div>
+      <div id="orderBody" style="font-size:13px;line-height:1.6;"></div>
+      <div id="orderActions" style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap;"></div>
+      <button class="cb" style="margin-top:10px;width:100%;" onclick="closeOrderModal()">닫기</button>
+    </div>
+  </div>
 
   <!-- 묶음발송 모달 -->
   <div id="bundleModal" class="modal-bg" style="display:none;" onclick="if(event.target===this)closeBundleModal()">
@@ -252,6 +263,7 @@ button.dfb.on{background:#1a1a1a;color:#fff;border-color:#1a1a1a;}
       </div>
       <div class="fa">
         <button class="sb" onclick="addItem()">등록하기</button>
+        <button class="sb" style="background:#7c3aed;" onclick="document.getElementById('orderFile').click()">📷 주문내역으로 등록</button>
         <button class="cb" onclick="go(0)">취소</button>
       </div>
     </div>
@@ -1448,6 +1460,117 @@ async function runIncomingScan(input){
       '<button class="sb" style="background:#0d9488;" onclick="confirmOcrCode()">이 품번으로 검색</button>'+
       '<button class="cb" onclick="closeScanModal()">취소</button>');
   }
+}
+// ── 주문내역 캡처 등록 ────────────────────────────────────
+var _orderItems=[];
+
+function closeOrderModal(){document.getElementById('orderModal').style.display='none';}
+function openOrderModal(body,actions){
+  document.getElementById('orderBody').innerHTML=body;
+  document.getElementById('orderActions').innerHTML=actions||'';
+  document.getElementById('orderModal').style.display='flex';
+}
+
+function removeOrderItem(i){
+  var el=document.getElementById('_or'+i);
+  if(el)el.remove();
+  // recount visible items
+  var left=document.querySelectorAll('[id^="_or"]').length;
+  var hdr=document.getElementById('_orHdr');
+  if(hdr)hdr.textContent=left+'건 — 수정 후 전체 등록';
+}
+
+function renderOrderItemRow(it,i){
+  var iStyle='width:100%;padding:6px 8px;border:1px solid #e2e0da;border-radius:6px;font-size:13px;font-family:inherit;box-sizing:border-box;';
+  var lStyle='font-size:11px;color:#888;margin-bottom:2px;';
+  var today=new Date().toISOString().split('T')[0];
+  return '<div id="_or'+i+'" style="border:1px solid #e2e0da;border-radius:8px;padding:10px 12px 8px;margin-bottom:8px;background:#f8f9fa;position:relative;">'+
+    '<button onclick="removeOrderItem('+i+')" style="position:absolute;top:6px;right:8px;background:none;border:none;cursor:pointer;font-size:18px;color:#9ca3af;line-height:1;">×</button>'+
+    '<div style="margin-bottom:6px;padding-right:24px;">'+
+      '<div style="'+lStyle+'">상품명 *</div>'+
+      '<input id="_oi_name_'+i+'" value="'+_esc(it.name||'')+'" style="'+iStyle+'"/>'+
+    '</div>'+
+    '<div style="display:grid;grid-template-columns:1fr 80px 70px;gap:6px;margin-bottom:6px;">'+
+      '<div><div style="'+lStyle+'">브랜드</div><input id="_oi_brand_'+i+'" value="'+_esc(it.brand||'')+'" style="'+iStyle+'"/></div>'+
+      '<div><div style="'+lStyle+'">사이즈</div><input id="_oi_size_'+i+'" value="'+_esc(it.size||'')+'" style="'+iStyle+'"/></div>'+
+      '<div><div style="'+lStyle+'">수량</div><input id="_oi_qty_'+i+'" type="number" min="1" value="'+(it.quantity||1)+'" style="'+iStyle+'"/></div>'+
+    '</div>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr 130px;gap:6px;margin-bottom:6px;">'+
+      '<div><div style="'+lStyle+'">매입가(원) *</div><input id="_oi_price_'+i+'" type="number" min="0" value="'+(it.buy_price||'')+'" style="'+iStyle+'"/></div>'+
+      '<div><div style="'+lStyle+'">매입처</div><input id="_oi_source_'+i+'" value="'+_esc(it.source||'')+'" style="'+iStyle+'"/></div>'+
+      '<div><div style="'+lStyle+'">매입일</div><input id="_oi_date_'+i+'" type="date" value="'+(it.buy_date||today)+'" style="'+iStyle+'"/></div>'+
+    '</div>'+
+    '<div><div style="'+lStyle+'">품번</div><input id="_oi_code_'+i+'" value="'+_esc(it.product_code||'')+'" placeholder="없으면 공백" style="'+iStyle+'"/></div>'+
+  '</div>';
+}
+
+async function runOrderScan(input){
+  if(!input.files||!input.files[0])return;
+  var file=input.files[0];
+  input.value='';
+  openOrderModal('<div style="text-align:center;color:#6b7280;padding:20px 0;">🤖 주문내역 AI 분석 중...</div>','');
+  try{
+    var b64=await resizeAndEncode(file,1500);
+    var resp=await fetch('/api/order',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({image:b64,mediaType:'image/jpeg'})
+    });
+    var data=await resp.json();
+    if(data.error){
+      openOrderModal(
+        '<p style="color:#dc2626;font-weight:700;margin-bottom:6px;">❌ 오류 '+(data._claudeStatus?data._claudeStatus+': ':'')+_esc(data.error)+'</p>'+
+        (data._claudeRaw?'<pre style="font-size:11px;background:#f8f9fa;padding:8px;border-radius:6px;white-space:pre-wrap;max-height:120px;overflow:auto;">'+_esc(data._claudeRaw)+'</pre>':''),
+        ''
+      );
+      return;
+    }
+    _orderItems=Array.isArray(data.items)?data.items:[];
+    if(!_orderItems.length){
+      openOrderModal('<p style="color:#d97706;font-weight:700;">⚠️ 주문 항목을 인식하지 못했습니다.<br><span style="font-size:12px;font-weight:400;color:#6b7280;">주문내역이 잘 보이는 캡처를 올려주세요.</span></p>','');
+      return;
+    }
+    showOrderPreview();
+  }catch(e){
+    openOrderModal('<p style="color:#dc2626;">❌ 오류: '+_esc(e.message)+'</p>','');
+  }
+}
+
+function showOrderPreview(){
+  var rows=_orderItems.map(function(it,i){return renderOrderItemRow(it,i);}).join('');
+  openOrderModal(
+    '<p id="_orHdr" style="font-weight:700;margin-bottom:10px;">'+_orderItems.length+'건 — 수정 후 전체 등록</p>'+rows,
+    '<button class="sb" style="background:#7c3aed;flex:1;" onclick="confirmOrderRegister()">✅ 전체 등록 (주문완료)</button>'
+  );
+}
+
+async function confirmOrderRegister(){
+  if(!sb){alert('설정 탭에서 Supabase 키를 먼저 입력해주세요.');return;}
+  var today=new Date().toISOString().split('T')[0];
+  var rows=[];
+  for(var i=0;i<_orderItems.length;i++){
+    if(!document.getElementById('_or'+i))continue; // 삭제된 항목
+    var name=(document.getElementById('_oi_name_'+i)||{}).value||'';
+    name=name.trim();
+    var price=parseInt((document.getElementById('_oi_price_'+i)||{}).value)||0;
+    if(!name||!price)continue;
+    var brand=((document.getElementById('_oi_brand_'+i)||{}).value||'').trim();
+    var size=((document.getElementById('_oi_size_'+i)||{}).value||'').trim();
+    var qty=parseInt((document.getElementById('_oi_qty_'+i)||{}).value)||1;
+    var source=((document.getElementById('_oi_source_'+i)||{}).value||'').trim();
+    var date=((document.getElementById('_oi_date_'+i)||{}).value||today);
+    var code=((document.getElementById('_oi_code_'+i)||{}).value||'').trim();
+    for(var j=0;j<qty;j++){
+      rows.push({name:name,brand:brand,size:size,product_code:code,source:source,
+        buy_price:price,buy_date:date,status:'주문완료',quantity:1,sold_quantity:0});
+    }
+  }
+  if(!rows.length){alert('등록할 항목이 없습니다. 상품명과 매입가를 확인해주세요.');return;}
+  var res=await sb.from('items').insert(rows);
+  if(res.error){alert('등록 실패: '+res.error.message);return;}
+  closeOrderModal();
+  alert(rows.length+'건을 주문완료로 등록했습니다!');
+  load();
 }
 // ────────────────────────────────────────────────────────
 
