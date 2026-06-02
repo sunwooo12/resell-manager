@@ -988,15 +988,8 @@ function calcSell(id,buyPrice){
 }
 
 // ── 입고 스캔 ──────────────────────────────────────────
-var _tsjLoaded=false,_lastScanIds=null,_lastOcrRaw='',_scanCodes=[],_scanMatchedIds=[];
+var _lastScanIds=null,_lastOcrRaw='',_scanCodes=[],_scanMatchedIds=[],_lastScanName='';
 
-function loadTesseract(cb){
-  if(_tsjLoaded){cb();return;}
-  var s=document.createElement('script');
-  s.src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
-  s.onload=function(){_tsjLoaded=true;cb();};
-  document.head.appendChild(s);
-}
 
 function extractProductCodes(text){
   var lines=text.split(/[\n\r]+/);
@@ -1171,7 +1164,7 @@ function renderScanItem(it,i,showCheck){
 }
 
 function _ocrBlock(){
-  return '<details style="margin-top:10px;"><summary style="cursor:pointer;font-size:12px;color:#9ca3af;">OCR 원문 보기</summary>'+
+  return '<details style="margin-top:10px;"><summary style="cursor:pointer;font-size:12px;color:#9ca3af;">AI 인식 결과 보기</summary>'+
     '<pre style="font-size:11px;white-space:pre-wrap;margin-top:6px;color:#6b7280;max-height:120px;overflow:auto;">'+_lastOcrRaw.slice(0,500)+'</pre></details>';
 }
 
@@ -1240,12 +1233,12 @@ function showOcrPicker(raw){
   var otherHtml=cleanOthers.map(function(t){return chip(t,t,false);}).join('');
 
   var body=
-    '<p style="font-size:12px;color:#6b7280;margin-bottom:8px;">품번을 탭해서 선택하고, 필요하면 아래에서 수정하세요.</p>'+
-    (candHtml?'<div style="margin-bottom:8px;"><span style="font-size:11px;color:#3b82f6;font-weight:600;">품번 후보 (OCR 보정 적용)</span><br>'+candHtml+'</div>':'')+
+    '<p style="font-size:12px;color:#6b7280;margin-bottom:8px;">AI가 품번을 자동 인식하지 못했습니다. 아래에 직접 입력해주세요.</p>'+
+    (candHtml?'<div style="margin-bottom:8px;"><span style="font-size:11px;color:#3b82f6;font-weight:600;">후보</span><br>'+candHtml+'</div>':'')+
     (otherHtml
       ?'<details style="margin-bottom:12px;"><summary style="cursor:pointer;font-size:12px;color:#9ca3af;padding:4px 0;">전체 텍스트 보기 ('+cleanOthers.length+'개)</summary><div style="margin-top:6px;">'+otherHtml+'</div></details>'
-      :'<p style="font-size:12px;color:#9ca3af;margin-bottom:12px;">인식된 텍스트가 없습니다.</p>')+
-    '<div style="font-size:12px;font-weight:600;color:#374151;margin-bottom:4px;">선택 / 직접 입력:</div>'+
+      :'')+
+    '<div style="font-size:12px;font-weight:600;color:#374151;margin-bottom:4px;">직접 입력:</div>'+
     '<input id="_sci" type="text" placeholder="품번 선택 또는 직접 입력" autocomplete="off" '+
     'style="width:100%;padding:10px;border:1.5px solid #3b82f6;border-radius:8px;font-size:14px;font-family:monospace;box-sizing:border-box;">';
 
@@ -1266,9 +1259,10 @@ function confirmOcrCode(){
   showScanResult(_scanCodes);
 }
 
-function goNewRegister(code){
+function goNewRegister(code,name){
   closeScanModal();
   if(code)document.getElementById('fpc').value=code;
+  if(name)document.getElementById('fn').value=name;
   go(1);
 }
 
@@ -1279,11 +1273,12 @@ function showAlreadyReceived(receivedItems,code){
       '<div style="font-size:11px;color:#9ca3af;margin-top:2px;">'+scanDetail(it)+'</div></div>';
   }).join('');
   var safeCode=(code||'').replace(/'/g,"\\'");
+  var safeName=(_lastScanName||'').replace(/'/g,"\\'");
   openScanModal(
     '<p style="font-size:15px;font-weight:700;color:#0d9488;margin-bottom:6px;">✅ 이미 입고된 상품이에요</p>'+
     '<p style="font-size:12px;color:#6b7280;margin-bottom:10px;">이 품번은 이미 보유중 상태입니다.</p>'+
     '<div>'+rows+'</div>',
-    '<button class="sb" style="background:#6b7280;" onclick="goNewRegister(\''+safeCode+'\')">새로 매입 등록</button>'+
+    '<button class="sb" style="background:#6b7280;" onclick="goNewRegister(\''+safeCode+'\',\''+safeName+'\')">새로 매입 등록</button>'+
     '<button class="cb" onclick="closeScanModal()">확인</button>');
 }
 // ────────────────────────────────────────────────────────
@@ -1354,22 +1349,55 @@ function showScanResult(codes){
   }
 }
 
+function resizeAndEncode(file,maxPx){
+  return new Promise(function(resolve,reject){
+    var img=new Image();
+    var url=URL.createObjectURL(file);
+    img.onload=function(){
+      URL.revokeObjectURL(url);
+      var w=img.width,h=img.height;
+      if(w>maxPx||h>maxPx){var r=Math.min(maxPx/w,maxPx/h);w=Math.round(w*r);h=Math.round(h*r);}
+      var c=document.createElement('canvas');c.width=w;c.height=h;
+      c.getContext('2d').drawImage(img,0,0,w,h);
+      resolve(c.toDataURL('image/jpeg',0.85).split(',')[1]);
+    };
+    img.onerror=reject;
+    img.src=url;
+  });
+}
+
 async function runIncomingScan(input){
   if(!input.files||!input.files[0])return;
   var file=input.files[0];
   input.value='';
-  openScanModal('<div style="text-align:center;color:#6b7280;">⏳ Tesseract 로딩 중...</div>','');
-  loadTesseract(async function(){
-    document.getElementById('scanBody').innerHTML='<div style="text-align:center;color:#6b7280;">🔍 인식 중... (최대 20초)</div>';
-    try{
-      var result=await Tesseract.recognize(file,['eng','kor'],{});
-      _lastOcrRaw=result.data.text;
-      _scanCodes=extractProductCodes(_lastOcrRaw);
-      showOcrPicker(_lastOcrRaw);
-    }catch(e){
-      openScanModal('<p style="color:#dc2626;">❌ OCR 오류: '+e.message+'</p>','');
+  _lastScanName='';
+  openScanModal('<div style="text-align:center;color:#6b7280;">🤖 AI 품번 인식 중...</div>','');
+  try{
+    var b64=await resizeAndEncode(file,1500);
+    var mime=file.type||'image/jpeg';
+    var resp=await fetch('/api/scan',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({image:b64,mediaType:mime})
+    });
+    var data=await resp.json();
+    _lastOcrRaw=JSON.stringify(data,null,2);
+    if(data.error){
+      showOcrPicker('');
+      return;
     }
-  });
+    _lastScanName=data.productName||'';
+    var codes=[];
+    if(data.productCode)codes.push(data.productCode);
+    if(Array.isArray(data.candidates)){
+      data.candidates.forEach(function(c){if(c&&!codes.includes(c))codes.push(c);});
+    }
+    _scanCodes=codes;
+    if(!codes.length){showOcrPicker('');return;}
+    showScanResult(codes);
+  }catch(e){
+    openScanModal('<p style="color:#dc2626;">❌ AI 인식 오류: '+e.message+'</p>','');
+  }
 }
 // ────────────────────────────────────────────────────────
 
