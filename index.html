@@ -1484,25 +1484,118 @@ async function _runScanFiles(files){
   }
 }
 // ── 픽커 & 붙여넣기 ──────────────────────────────────────
-function _pastePickerHtml(fileId, camId, multi){
-  return '<div class="paste-zone" id="_pasteZone">'+
-    '<div style="font-size:32px;margin-bottom:8px;">📋</div>'+
-    '<div style="font-weight:700;font-size:14px;color:#374151;margin-bottom:4px;">Ctrl+V 로 붙여넣기</div>'+
-    '<div style="font-size:12px;">클립보드 이미지(스크린샷)를 여기에 붙여넣으세요</div>'+
-  '</div>'+
-  '<div style="display:flex;gap:8px;">'+
-    '<button class="sb" style="flex:1;" onclick="document.getElementById(\''+fileId+'\').click()">🗂 파일 선택'+(multi?' (여러 장)':'')+'</button>'+
-    '<button class="sb" style="flex:1;background:#4b5563;" onclick="document.getElementById(\''+camId+'\').click()">📷 카메라</button>'+
-  '</div>';
+function openScanPicker(){
+  openScanModal(
+    '<div class="paste-zone">'+
+      '<div style="font-size:28px;margin-bottom:6px;">📋</div>'+
+      '<div style="font-weight:700;font-size:14px;color:#374151;margin-bottom:4px;">Ctrl+V 로 붙여넣기</div>'+
+      '<div style="font-size:12px;">스크린샷을 붙여넣거나 아래에서 선택</div>'+
+    '</div>'+
+    '<div style="display:flex;gap:8px;margin-top:8px;">'+
+      '<button class="sb" style="flex:1;" onclick="document.getElementById(\'scanFilePicker\').click()">🗂 파일 선택</button>'+
+      '<button class="sb" style="flex:1;background:#4b5563;" onclick="document.getElementById(\'scanFile\').click()">📷 카메라</button>'+
+    '</div>',
+  '');
 }
 
 function openOrderPicker(){
   _orderItems=[];
-  openOrderModal(_pastePickerHtml('orderFile','orderFileCam',true),'');
+  _orderPendingImages=[];
+  _orderPickerMode=true;
+  _showOrderPickerUI();
 }
 
-function openScanPicker(){
-  openScanModal(_pastePickerHtml('scanFilePicker','scanFile',false),'');
+function _orderPickerBody(){
+  var cnt=_orderPendingImages.length;
+  var thumbs=_orderPendingImages.map(function(img,i){
+    return '<div style="position:relative;width:60px;height:60px;flex-shrink:0;">'+
+      '<img src="'+img.dataUrl+'" style="width:60px;height:60px;object-fit:cover;border-radius:6px;border:1px solid #e2e0da;"/>'+
+      '<button onclick="removeOrderPendingImg('+i+')" style="position:absolute;top:-5px;right:-5px;width:18px;height:18px;border-radius:50%;background:#ef4444;color:#fff;border:none;cursor:pointer;font-size:11px;line-height:18px;text-align:center;padding:0;">×</button>'+
+    '</div>';
+  }).join('');
+  var btnStyle=cnt===0?'width:100%;background:#9ca3af;cursor:not-allowed;margin-top:8px;':'width:100%;background:#7c3aed;margin-top:8px;';
+  return '<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">'+
+    '<span style="font-size:13px;font-weight:600;">이미지</span>'+
+    '<span id="_orderImgCnt" style="font-size:12px;color:#6b7280;">'+cnt+'/5장</span>'+
+  '</div>'+
+  '<div id="_orderImgThumb" style="display:flex;gap:6px;flex-wrap:wrap;min-height:60px;margin-bottom:10px;">'+thumbs+'</div>'+
+  '<div class="paste-zone">'+
+    '<div style="font-size:26px;margin-bottom:5px;">📋</div>'+
+    '<div style="font-weight:700;font-size:14px;color:#374151;margin-bottom:3px;">Ctrl+V 로 붙여넣기</div>'+
+    '<div style="font-size:12px;">스크린샷을 붙여넣거나 아래에서 파일/카메라 선택</div>'+
+  '</div>'+
+  '<div style="display:flex;gap:8px;margin-top:8px;">'+
+    '<button class="sb" style="flex:1;" onclick="document.getElementById(\'orderFile\').click()">🗂 파일 선택 (여러 장)</button>'+
+    '<button class="sb" style="flex:1;background:#4b5563;" onclick="document.getElementById(\'orderFileCam\').click()">📷 카메라</button>'+
+  '</div>'+
+  '<button id="_orderAnalyzeBtn" class="sb" style="'+btnStyle+'" onclick="analyzeOrderImages()">분석하기 ('+cnt+'장)</button>';
+}
+
+function _showOrderPickerUI(){openOrderModal(_orderPickerBody(),'');}
+
+function _updateOrderPickerUI(){
+  var cnt=_orderPendingImages.length;
+  var thumbEl=document.getElementById('_orderImgThumb');
+  var cntEl=document.getElementById('_orderImgCnt');
+  var btnEl=document.getElementById('_orderAnalyzeBtn');
+  if(!thumbEl){_showOrderPickerUI();return;}
+  thumbEl.innerHTML=_orderPendingImages.map(function(img,i){
+    return '<div style="position:relative;width:60px;height:60px;flex-shrink:0;">'+
+      '<img src="'+img.dataUrl+'" style="width:60px;height:60px;object-fit:cover;border-radius:6px;border:1px solid #e2e0da;"/>'+
+      '<button onclick="removeOrderPendingImg('+i+')" style="position:absolute;top:-5px;right:-5px;width:18px;height:18px;border-radius:50%;background:#ef4444;color:#fff;border:none;cursor:pointer;font-size:11px;line-height:18px;text-align:center;padding:0;">×</button>'+
+    '</div>';
+  }).join('');
+  if(cntEl)cntEl.textContent=cnt+'/5장';
+  if(btnEl){
+    btnEl.textContent='분석하기 ('+cnt+'장)';
+    btnEl.disabled=cnt===0;
+    btnEl.style.background=cnt===0?'#9ca3af':'#7c3aed';
+    btnEl.style.cursor=cnt===0?'not-allowed':'pointer';
+  }
+}
+
+async function addOrderImages(files){
+  var remaining=5-_orderPendingImages.length;
+  if(remaining<=0){alert('최대 5장까지 추가할 수 있습니다.');return;}
+  var toAdd=Array.from(files).slice(0,remaining);
+  if(Array.from(files).length>remaining)alert(Array.from(files).length+'장 중 '+remaining+'장만 추가됩니다. (최대 5장)');
+  for(var i=0;i<toAdd.length;i++){
+    var b64=await resizeAndEncode(toAdd[i],1500);
+    _orderPendingImages.push({b64:b64,dataUrl:'data:image/jpeg;base64,'+b64});
+  }
+  _updateOrderPickerUI();
+}
+
+function removeOrderPendingImg(i){
+  _orderPendingImages.splice(i,1);
+  _updateOrderPickerUI();
+}
+
+async function analyzeOrderImages(){
+  if(!_orderPendingImages.length)return;
+  _orderPickerMode=false;
+  var cnt=_orderPendingImages.length;
+  openOrderModal('<div style="text-align:center;color:#6b7280;padding:24px 0;">🤖 '+cnt+'장 함께 분석 중...</div>','');
+  try{
+    var images=_orderPendingImages.map(function(img){return{data:img.b64,mediaType:'image/jpeg'};});
+    var resp=await fetch('/api/order',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({images:images})});
+    var data=await resp.json();
+    if(data.error){
+      openOrderModal('<p style="color:#dc2626;font-weight:700;margin-bottom:6px;">❌ 오류 '+(data._claudeStatus?data._claudeStatus+': ':'')+_esc(data.error)+'</p>'+
+        (data._claudeRaw?'<pre style="font-size:11px;background:#f8f9fa;padding:8px;border-radius:6px;white-space:pre-wrap;max-height:120px;overflow:auto;">'+_esc(data._claudeRaw)+'</pre>':''),'');
+      return;
+    }
+    var its=Array.isArray(data.items)?data.items.filter(function(it){return it&&(it.name||'').trim();}):[];
+    if(!its.length){
+      openOrderModal('<p style="color:#d97706;font-weight:700;">⚠️ 주문 항목을 인식하지 못했습니다.<br><span style="font-size:12px;font-weight:400;color:#6b7280;">주문내역이 잘 보이는 캡처를 올려주세요.</span></p>','');
+      return;
+    }
+    _orderItems=its;
+    showOrderPreview(cnt,0,[]);
+  }catch(e){
+    openOrderModal('<p style="color:#dc2626;">❌ 오류: '+_esc(e.message)+'</p>','');
+  }
 }
 
 document.addEventListener('paste',function(e){
@@ -1513,12 +1606,16 @@ document.addEventListener('paste',function(e){
   if(!imgs.length)return;
   var orderOpen=document.getElementById('orderModal').style.display!=='none';
   var scanOpen=document.getElementById('scanModal').style.display!=='none';
-  if(orderOpen){_processOrderFiles(imgs,_orderItems.length>0);return;}
+  if(orderOpen){
+    if(_orderPickerMode)addOrderImages(imgs);
+    else _processOrderFiles(imgs,_orderItems.length>0);
+    return;
+  }
   if(scanOpen){_runScanFiles(imgs);return;}
 });
 
 // ── 주문내역 캡처 등록 ────────────────────────────────────
-var _orderItems=[];
+var _orderItems=[],_orderPendingImages=[],_orderPickerMode=false;
 
 function closeOrderModal(){document.getElementById('orderModal').style.display='none';}
 function openOrderModal(body,actions){
@@ -1579,7 +1676,8 @@ async function runOrderScan(input){
   if(!input.files||!input.files.length)return;
   var files=Array.from(input.files);
   input.value='';
-  await _processOrderFiles(files,false);
+  if(_orderPickerMode){await addOrderImages(files);}
+  else{await _processOrderFiles(files,false);}
 }
 
 async function _processOrderFiles(files,append){
