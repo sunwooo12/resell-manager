@@ -7,7 +7,7 @@ export default async function handler(req, res) {
   if (!image) return res.status(400).json({ error: 'No image provided' });
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return res.status(500).json({ error: 'ANTHROPIC_API_KEY not set' });
+  if (!apiKey) return res.status(200).json({ error: 'ANTHROPIC_API_KEY not set', _claudeStatus: 0 });
 
   const prompt =
     '이 상품 박스/라벨 사진에서 품번(스타일/모델 코드)을 찾아 JSON만 반환:\n' +
@@ -25,7 +25,7 @@ export default async function handler(req, res) {
         'content-type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'claude-haiku-4-5',
+        model: 'claude-sonnet-4-6',
         max_tokens: 300,
         messages: [
           {
@@ -46,24 +46,52 @@ export default async function handler(req, res) {
       }),
     });
   } catch (e) {
-    return res.status(500).json({ error: 'Network error: ' + e.message });
+    return res.status(200).json({ error: 'Network error: ' + e.message, _claudeStatus: 0 });
   }
+
+  const claudeStatus = apiRes.status;
+  const rawText = await apiRes.text();
 
   if (!apiRes.ok) {
-    const errText = await apiRes.text();
-    return res.status(500).json({ error: 'AI API error ' + apiRes.status + ': ' + errText });
+    return res.status(200).json({
+      error: 'Claude API ' + claudeStatus,
+      _claudeStatus: claudeStatus,
+      _claudeRaw: rawText.slice(0, 600),
+    });
   }
 
-  const data = await apiRes.json();
-  const text = (data.content && data.content[0] && data.content[0].text) || '';
+  let claudeData;
+  try {
+    claudeData = JSON.parse(rawText);
+  } catch (e) {
+    return res.status(200).json({
+      error: 'Claude 응답 파싱 오류',
+      _claudeStatus: claudeStatus,
+      _claudeRaw: rawText.slice(0, 300),
+    });
+  }
+
+  const text = (claudeData.content && claudeData.content[0] && claudeData.content[0].text) || '';
 
   const match = text.match(/\{[\s\S]*\}/);
-  if (!match) return res.status(200).json({ error: 'No JSON in AI response', raw: text });
+  if (!match) {
+    return res.status(200).json({
+      error: 'JSON 없음 — Claude 원문을 확인하세요',
+      _claudeStatus: claudeStatus,
+      _claudeRaw: text.slice(0, 400),
+    });
+  }
 
   try {
     const result = JSON.parse(match[0]);
+    result._claudeStatus = claudeStatus;
+    result._claudeRaw = text.slice(0, 400);
     return res.status(200).json(result);
   } catch (e) {
-    return res.status(200).json({ error: 'JSON parse error', raw: text });
+    return res.status(200).json({
+      error: 'JSON 파싱 오류: ' + e.message,
+      _claudeStatus: claudeStatus,
+      _claudeRaw: text.slice(0, 400),
+    });
   }
 }

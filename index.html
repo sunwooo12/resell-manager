@@ -1366,6 +1366,20 @@ function resizeAndEncode(file,maxPx){
   });
 }
 
+function _esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function _scanDebugBox(data){
+  var statusLine='HTTP(Claude): '+(data._claudeStatus||'?');
+  var raw=data._claudeRaw||'';
+  return '<details style="margin-top:10px;"><summary style="cursor:pointer;font-size:12px;color:#9ca3af;">응답 원문 보기</summary>'+
+    '<pre style="font-size:11px;white-space:pre-wrap;margin-top:6px;color:#6b7280;background:#f8f9fa;border-radius:6px;padding:8px;max-height:140px;overflow:auto;">'+
+    _esc(statusLine)+'\n\n'+_esc(raw)+'</pre></details>';
+}
+function _scanManualInput(){
+  return '<div style="font-size:12px;font-weight:600;color:#374151;margin:10px 0 4px;">품번 직접 입력:</div>'+
+    '<input id="_sci" type="text" placeholder="예: 206750-001" autocomplete="off" '+
+    'style="width:100%;padding:10px;border:1.5px solid #3b82f6;border-radius:8px;font-size:14px;font-family:monospace;box-sizing:border-box;">';
+}
+
 async function runIncomingScan(input){
   if(!input.files||!input.files[0])return;
   var file=input.files[0];
@@ -1380,12 +1394,21 @@ async function runIncomingScan(input){
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({image:b64,mediaType:mime})
     });
+    var httpStatus=resp.status;
     var data=await resp.json();
     _lastOcrRaw=JSON.stringify(data,null,2);
+
     if(data.error){
-      showOcrPicker('');
+      var errLine='<p style="color:#dc2626;font-weight:700;margin-bottom:6px;">❌ 오류 '+
+        (data._claudeStatus?data._claudeStatus+': ':'')+_esc(data.error)+'</p>';
+      openScanModal(
+        errLine+_scanDebugBox(data)+_scanManualInput(),
+        '<button class="sb" style="background:#0d9488;" onclick="confirmOcrCode()">이 품번으로 검색</button>'+
+        '<button class="cb" onclick="closeScanModal()">취소</button>'
+      );
       return;
     }
+
     _lastScanName=data.productName||'';
     var codes=[];
     if(data.productCode)codes.push(data.productCode);
@@ -1393,10 +1416,21 @@ async function runIncomingScan(input){
       data.candidates.forEach(function(c){if(c&&!codes.includes(c))codes.push(c);});
     }
     _scanCodes=codes;
-    if(!codes.length){showOcrPicker('');return;}
+
+    if(!codes.length){
+      openScanModal(
+        '<p style="color:#d97706;font-weight:700;margin-bottom:6px;">⚠️ 품번을 인식하지 못했습니다</p>'+
+        _scanDebugBox(data)+_scanManualInput(),
+        '<button class="sb" style="background:#0d9488;" onclick="confirmOcrCode()">이 품번으로 검색</button>'+
+        '<button class="cb" onclick="closeScanModal()">취소</button>'
+      );
+      return;
+    }
     showScanResult(codes);
   }catch(e){
-    openScanModal('<p style="color:#dc2626;">❌ AI 인식 오류: '+e.message+'</p>','');
+    openScanModal('<p style="color:#dc2626;">❌ AI 인식 오류: '+_esc(e.message)+'</p>'+_scanManualInput(),
+      '<button class="sb" style="background:#0d9488;" onclick="confirmOcrCode()">이 품번으로 검색</button>'+
+      '<button class="cb" onclick="closeScanModal()">취소</button>');
   }
 }
 // ────────────────────────────────────────────────────────
