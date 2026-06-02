@@ -1544,7 +1544,7 @@ async function runOrderScan(input){
       if(data.error){
         errMsgs.push((f+1)+'장: '+data.error);
       }else if(Array.isArray(data.items)){
-        allItems=allItems.concat(data.items);
+        allItems=allItems.concat(data.items.filter(function(it){return it&&(it.name||'').trim();}));
       }
     }catch(e){
       errMsgs.push((f+1)+'장: '+e.message);
