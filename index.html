@@ -616,7 +616,26 @@ async function load(){
   pe.className='sv '+(profit>=0?'g':'r');
   document.getElementById('h3').textContent=todaySales>0?todaySales.toLocaleString()+'원':'0원';
   document.getElementById('h4').textContent=todayBuy>0?todayBuy.toLocaleString()+'원':'0원';
+  syncSourceDropdown();
   render();
+}
+
+function syncSourceDropdown(){
+  var sel=document.getElementById('fs');
+  if(!sel)return;
+  var existing=Array.from(sel.options).map(function(o){return o.value;});
+  var newSources=[];
+  items.forEach(function(it){
+    var s=(it.source||'').trim();
+    if(s&&!existing.includes(s)&&!newSources.includes(s))newSources.push(s);
+  });
+  newSources.sort();
+  newSources.forEach(function(s){
+    var opt=document.createElement('option');
+    opt.value=s;opt.textContent=s;
+    var giOpt=Array.from(sel.options).find(function(o){return o.value==='기타';});
+    if(giOpt)sel.insertBefore(opt,giOpt);else sel.appendChild(opt);
+  });
 }
 
 function getGroupKey(it){
