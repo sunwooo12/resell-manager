@@ -13,7 +13,8 @@ export default async function handler(req, res) {
     '이 상품 박스/라벨 사진에서 품번(스타일/모델 코드)을 찾아 JSON만 반환:\n' +
     '{"productCode":"","productName":"","candidates":[]}.\n' +
     '품번은 영문+숫자 또는 숫자-하이픈 형태(예: 206750-001, JR4025, DV0833-100).\n' +
-    'UPC 바코드 긴 숫자·사이즈표·전화번호·날짜는 품번 아님. 설명 없이 JSON만.';
+    'UPC 바코드 긴 숫자·사이즈표·전화번호·날짜는 품번 아님.\n' +
+    '품번은 라벨에 보이는 그대로 정확히 읽을 것. 추측·임의 입력 금지. 설명 없이 JSON만.';
 
   let apiRes;
   try {

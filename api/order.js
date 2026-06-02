@@ -14,7 +14,6 @@ export default async function handler(req, res) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return res.status(200).json({ error: 'ANTHROPIC_API_KEY not set', _claudeStatus: 0 });
 
-  const today = new Date().toISOString().split('T')[0];
   const prompt =
     '이 온라인 쇼핑몰 주문내역(SSG/무신사/네이버/나이키공홈/29CM/롯데 등) 캡처에서\n' +
     '아래 형식의 JSON 객체만 반환:\n' +
@@ -22,10 +21,11 @@ export default async function handler(req, res) {
     '\n' +
     '- total_paid: 할인·쿠폰·포인트 적용 후 실제 결제금액(배송비 제외). 확인 불가면 0.\n' +
     '- list_price: 각 상품의 개당 표시 가격(할인 전 개별 정가) 정수.\n' +
-    '- buy_date: YYYY-MM-DD. 없으면 ' + today + '.\n' +
+    '- buy_date: YYYY-MM-DD. 캡처에 날짜가 보이면 반드시 그 날짜 사용. 안 보이거나 불확실하면 빈 문자열("").\n' +
     '⚠️ items에 넣지 말 것: 합계·총금액·배송비·쿠폰할인·포인트·주문번호·요약줄·헤더줄.\n' +
     '상품명(name)이 없거나 실제 상품이 아닌 줄은 반드시 제외.\n' +
     '여러 장 이미지가 있으면 모두 합쳐 중복 없이 하나의 목록으로.\n' +
+    '날짜·품번·가격은 캡처에 보이는 그대로 정확히 읽을 것. 추측·임의 입력 금지.\n' +
     '설명 없이 JSON만.';
 
   // Build content: all image blocks first, then the text prompt
