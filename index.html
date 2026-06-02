@@ -198,7 +198,7 @@ button.dfb.on{background:#1a1a1a;color:#fff;border-color:#1a1a1a;}
     </div>
   </div>
   <input type="file" id="scanFile" accept="image/*" capture="environment" style="display:none;" onchange="runIncomingScan(this)">
-  <input type="file" id="orderFile" accept="image/*" style="display:none;" onchange="runOrderScan(this)">
+  <input type="file" id="orderFile" accept="image/*" multiple style="display:none;" onchange="runOrderScan(this)">
 
   <!-- 주문내역 캡처 모달 -->
   <div id="orderModal" class="modal-bg" style="display:none;" onclick="if(event.target===this)closeOrderModal()">
@@ -1504,42 +1504,80 @@ function renderOrderItemRow(it,i){
   '</div>';
 }
 
-async function runOrderScan(input){
-  if(!input.files||!input.files[0])return;
-  var file=input.files[0];
-  input.value='';
-  openOrderModal('<div style="text-align:center;color:#6b7280;padding:20px 0;">🤖 주문내역 AI 분석 중...</div>','');
-  try{
-    var b64=await resizeAndEncode(file,1500);
-    var resp=await fetch('/api/order',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({image:b64,mediaType:'image/jpeg'})
-    });
-    var data=await resp.json();
-    if(data.error){
-      openOrderModal(
-        '<p style="color:#dc2626;font-weight:700;margin-bottom:6px;">❌ 오류 '+(data._claudeStatus?data._claudeStatus+': ':'')+_esc(data.error)+'</p>'+
-        (data._claudeRaw?'<pre style="font-size:11px;background:#f8f9fa;padding:8px;border-radius:6px;white-space:pre-wrap;max-height:120px;overflow:auto;">'+_esc(data._claudeRaw)+'</pre>':''),
-        ''
-      );
-      return;
-    }
-    _orderItems=Array.isArray(data.items)?data.items:[];
-    if(!_orderItems.length){
-      openOrderModal('<p style="color:#d97706;font-weight:700;">⚠️ 주문 항목을 인식하지 못했습니다.<br><span style="font-size:12px;font-weight:400;color:#6b7280;">주문내역이 잘 보이는 캡처를 올려주세요.</span></p>','');
-      return;
-    }
-    showOrderPreview();
-  }catch(e){
-    openOrderModal('<p style="color:#dc2626;">❌ 오류: '+_esc(e.message)+'</p>','');
-  }
+function deduplicateOrderItems(arr){
+  var seen={};
+  return arr.filter(function(it){
+    var key=[
+      (it.name||'').toLowerCase().replace(/\s+/g,''),
+      String(it.buy_price||0),
+      (it.size||'').toLowerCase().replace(/\s+/g,''),
+      String(it.quantity||1)
+    ].join('|');
+    if(seen[key])return false;
+    seen[key]=true;
+    return true;
+  });
 }
 
-function showOrderPreview(){
+async function runOrderScan(input){
+  if(!input.files||!input.files.length)return;
+  var files=Array.from(input.files);
+  input.value='';
+  var total=files.length;
+  openOrderModal('<div id="_orProgress" style="text-align:center;color:#6b7280;padding:20px 0;">🤖 1/'+total+'장 분석 중...</div>','');
+
+  var allItems=[];
+  var errMsgs=[];
+  for(var f=0;f<files.length;f++){
+    var prog=document.getElementById('_orProgress');
+    if(prog)prog.textContent='🤖 '+(f+1)+'/'+total+'장 분석 중...';
+    try{
+      var b64=await resizeAndEncode(files[f],1500);
+      var resp=await fetch('/api/order',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({image:b64,mediaType:'image/jpeg'})
+      });
+      var data=await resp.json();
+      if(data.error){
+        errMsgs.push((f+1)+'장: '+data.error);
+      }else if(Array.isArray(data.items)){
+        allItems=allItems.concat(data.items);
+      }
+    }catch(e){
+      errMsgs.push((f+1)+'장: '+e.message);
+    }
+  }
+
+  if(!allItems.length){
+    openOrderModal(
+      '<p style="color:#d97706;font-weight:700;">⚠️ 주문 항목을 인식하지 못했습니다.</p>'+
+      (errMsgs.length?'<p style="font-size:12px;color:#dc2626;margin-top:6px;">'+_esc(errMsgs.join(' / '))+'</p>':''),
+      ''
+    );
+    return;
+  }
+
+  var before=allItems.length;
+  allItems=deduplicateOrderItems(allItems);
+  var removed=before-allItems.length;
+
+  _orderItems=allItems;
+  showOrderPreview(total,removed,errMsgs);
+}
+
+function showOrderPreview(fileCount,dedupRemoved,errMsgs){
+  var sub='';
+  if((fileCount&&fileCount>1)||dedupRemoved){
+    sub='<p style="font-size:12px;color:#6b7280;margin:-4px 0 8px;">'+
+      (fileCount>1?fileCount+'장 처리':'')+(dedupRemoved?' · 중복 '+dedupRemoved+'건 제거':'')+'</p>';
+  }
+  if(errMsgs&&errMsgs.length){
+    sub+='<p style="font-size:11px;color:#dc2626;margin-bottom:8px;">⚠️ '+_esc(errMsgs.join(' / '))+'</p>';
+  }
   var rows=_orderItems.map(function(it,i){return renderOrderItemRow(it,i);}).join('');
   openOrderModal(
-    '<p id="_orHdr" style="font-weight:700;margin-bottom:10px;">'+_orderItems.length+'건 — 수정 후 전체 등록</p>'+rows,
+    '<p id="_orHdr" style="font-weight:700;margin-bottom:4px;">'+_orderItems.length+'건 — 수정 후 전체 등록</p>'+sub+rows,
     '<button class="sb" style="background:#7c3aed;flex:1;" onclick="confirmOrderRegister()">✅ 전체 등록 (주문완료)</button>'
   );
 }
