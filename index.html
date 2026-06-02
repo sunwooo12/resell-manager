@@ -124,6 +124,8 @@ button.dfb.on{background:#1a1a1a;color:#fff;border-color:#1a1a1a;}
 .modal-field{margin-bottom:14px;}
 .modal-field .il{margin-bottom:4px;}
 .modal-field input{width:100%;padding:9px 12px;border:1px solid #e2e0da;border-radius:8px;font-size:14px;font-family:'Noto Sans KR',sans-serif;}
+.paste-zone{border:2px dashed #d1d5db;border-radius:12px;padding:28px 16px;text-align:center;color:#6b7280;margin-bottom:12px;transition:border-color 0.15s,background 0.15s;}
+.paste-zone.drag-over,.paste-zone:focus-within{border-color:#7c3aed;background:#faf5ff;}
 </style>
 </head>
 <body>
@@ -172,8 +174,8 @@ button.dfb.on{background:#1a1a1a;color:#fff;border-color:#1a1a1a;}
       <button class="fb" id="sortBtn" onclick="sortAsc=!sortAsc;document.getElementById('sortBtn').textContent=sortAsc?'오래된순 ↑':'최신순 ↓';render()">오래된순 ↑</button>
       <div style="margin-left:auto;display:flex;flex-direction:column;gap:6px;align-items:stretch;">
         <button class="ab" style="margin-left:0;" onclick="go(1)">+ 매입 등록</button>
-        <button class="ab" style="margin-left:0;background:#7c3aed;" onclick="document.getElementById('orderFile').click()">📷 주문내역 등록</button>
-        <button class="ab" style="margin-left:0;background:#0d9488;" onclick="document.getElementById('scanFile').click()">📷 입고 스캔</button>
+        <button class="ab" style="margin-left:0;background:#7c3aed;" onclick="openOrderPicker()">📷 주문내역 등록</button>
+        <button class="ab" style="margin-left:0;background:#0d9488;" onclick="openScanPicker()">📷 입고 스캔</button>
       </div>
     </div>
     <div class="date-filter-bar">
@@ -200,8 +202,10 @@ button.dfb.on{background:#1a1a1a;color:#fff;border-color:#1a1a1a;}
       <button class="cb" style="margin-top:12px;width:100%;" onclick="closeScanModal()">닫기</button>
     </div>
   </div>
-  <input type="file" id="scanFile" accept="image/*" capture="environment" style="display:none;" onchange="runIncomingScan(this)">
-  <input type="file" id="orderFile" accept="image/*" multiple style="display:none;" onchange="runOrderScan(this)">
+  <input type="file" id="scanFile"       accept="image/*" capture="environment" style="display:none;" onchange="runIncomingScan(this)">
+  <input type="file" id="scanFilePicker" accept="image/*" style="display:none;" onchange="runIncomingScan(this)">
+  <input type="file" id="orderFile"      accept="image/*" multiple style="display:none;" onchange="runOrderScan(this)">
+  <input type="file" id="orderFileCam"   accept="image/*" capture="environment" style="display:none;" onchange="runOrderScan(this)">
 
   <!-- 주문내역 캡처 모달 -->
   <div id="orderModal" class="modal-bg" style="display:none;" onclick="if(event.target===this)closeOrderModal()">
@@ -1433,31 +1437,31 @@ async function runIncomingScan(input){
   if(!input.files||!input.files[0])return;
   var file=input.files[0];
   input.value='';
+  await _runScanFiles([file]);
+}
+
+async function _runScanFiles(files){
+  var file=files[0];
+  if(!file)return;
   _lastScanName='';
   openScanModal('<div style="text-align:center;color:#6b7280;">🤖 AI 품번 인식 중...</div>','');
   try{
     var b64=await resizeAndEncode(file,1500);
-    var mime='image/jpeg'; // canvas.toDataURL always outputs JPEG
     var resp=await fetch('/api/scan',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({image:b64,mediaType:mime})
+      body:JSON.stringify({image:b64,mediaType:'image/jpeg'})
     });
-    var httpStatus=resp.status;
     var data=await resp.json();
     _lastOcrRaw=JSON.stringify(data,null,2);
-
     if(data.error){
       var errLine='<p style="color:#dc2626;font-weight:700;margin-bottom:6px;">❌ 오류 '+
         (data._claudeStatus?data._claudeStatus+': ':'')+_esc(data.error)+'</p>';
-      openScanModal(
-        errLine+_scanDebugBox(data)+_scanManualInput(),
+      openScanModal(errLine+_scanDebugBox(data)+_scanManualInput(),
         '<button class="sb" style="background:#0d9488;" onclick="confirmOcrCode()">이 품번으로 검색</button>'+
-        '<button class="cb" onclick="closeScanModal()">취소</button>'
-      );
+        '<button class="cb" onclick="closeScanModal()">취소</button>');
       return;
     }
-
     _lastScanName=data.productName||'';
     var codes=[];
     if(data.productCode)codes.push(data.productCode);
@@ -1465,14 +1469,11 @@ async function runIncomingScan(input){
       data.candidates.forEach(function(c){if(c&&!codes.includes(c))codes.push(c);});
     }
     _scanCodes=codes;
-
     if(!codes.length){
-      openScanModal(
-        '<p style="color:#d97706;font-weight:700;margin-bottom:6px;">⚠️ 품번을 인식하지 못했습니다</p>'+
+      openScanModal('<p style="color:#d97706;font-weight:700;margin-bottom:6px;">⚠️ 품번을 인식하지 못했습니다</p>'+
         _scanDebugBox(data)+_scanManualInput(),
         '<button class="sb" style="background:#0d9488;" onclick="confirmOcrCode()">이 품번으로 검색</button>'+
-        '<button class="cb" onclick="closeScanModal()">취소</button>'
-      );
+        '<button class="cb" onclick="closeScanModal()">취소</button>');
       return;
     }
     showScanResult(codes);
@@ -1482,6 +1483,40 @@ async function runIncomingScan(input){
       '<button class="cb" onclick="closeScanModal()">취소</button>');
   }
 }
+// ── 픽커 & 붙여넣기 ──────────────────────────────────────
+function _pastePickerHtml(fileId, camId, multi){
+  return '<div class="paste-zone" id="_pasteZone">'+
+    '<div style="font-size:32px;margin-bottom:8px;">📋</div>'+
+    '<div style="font-weight:700;font-size:14px;color:#374151;margin-bottom:4px;">Ctrl+V 로 붙여넣기</div>'+
+    '<div style="font-size:12px;">클립보드 이미지(스크린샷)를 여기에 붙여넣으세요</div>'+
+  '</div>'+
+  '<div style="display:flex;gap:8px;">'+
+    '<button class="sb" style="flex:1;" onclick="document.getElementById(\''+fileId+'\').click()">🗂 파일 선택'+(multi?' (여러 장)':'')+'</button>'+
+    '<button class="sb" style="flex:1;background:#4b5563;" onclick="document.getElementById(\''+camId+'\').click()">📷 카메라</button>'+
+  '</div>';
+}
+
+function openOrderPicker(){
+  _orderItems=[];
+  openOrderModal(_pastePickerHtml('orderFile','orderFileCam',true),'');
+}
+
+function openScanPicker(){
+  openScanModal(_pastePickerHtml('scanFilePicker','scanFile',false),'');
+}
+
+document.addEventListener('paste',function(e){
+  var ci=e.clipboardData&&e.clipboardData.items;
+  if(!ci)return;
+  var imgs=[];
+  for(var i=0;i<ci.length;i++){if(ci[i].type.startsWith('image/'))imgs.push(ci[i].getAsFile());}
+  if(!imgs.length)return;
+  var orderOpen=document.getElementById('orderModal').style.display!=='none';
+  var scanOpen=document.getElementById('scanModal').style.display!=='none';
+  if(orderOpen){_processOrderFiles(imgs,_orderItems.length>0);return;}
+  if(scanOpen){_runScanFiles(imgs);return;}
+});
+
 // ── 주문내역 캡처 등록 ────────────────────────────────────
 var _orderItems=[];
 
@@ -1544,47 +1579,47 @@ async function runOrderScan(input){
   if(!input.files||!input.files.length)return;
   var files=Array.from(input.files);
   input.value='';
-  var total=files.length;
-  openOrderModal('<div id="_orProgress" style="text-align:center;color:#6b7280;padding:20px 0;">🤖 1/'+total+'장 분석 중...</div>','');
+  await _processOrderFiles(files,false);
+}
 
-  var allItems=[];
-  var errMsgs=[];
+async function _processOrderFiles(files,append){
+  if(!files.length)return;
+  var total=files.length;
+  if(!append||!_orderItems.length){
+    openOrderModal('<div id="_orProgress" style="text-align:center;color:#6b7280;padding:20px 0;">🤖 1/'+total+'장 분석 중...</div>','');
+  }else{
+    var pb=document.createElement('div');
+    pb.id='_orProgress';
+    pb.style='text-align:center;color:#6b7280;padding:6px;background:#f0fdf4;border-radius:8px;margin-bottom:8px;font-size:12px;';
+    pb.textContent='🤖 추가 '+total+'장 분석 중...';
+    var ob=document.getElementById('orderBody');
+    if(ob)ob.prepend(pb);
+  }
+  var newItems=[],errMsgs=[];
   for(var f=0;f<files.length;f++){
     var prog=document.getElementById('_orProgress');
     if(prog)prog.textContent='🤖 '+(f+1)+'/'+total+'장 분석 중...';
     try{
       var b64=await resizeAndEncode(files[f],1500);
-      var resp=await fetch('/api/order',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({image:b64,mediaType:'image/jpeg'})
-      });
+      var resp=await fetch('/api/order',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({image:b64,mediaType:'image/jpeg'})});
       var data=await resp.json();
-      if(data.error){
-        errMsgs.push((f+1)+'장: '+data.error);
-      }else if(Array.isArray(data.items)){
-        allItems=allItems.concat(data.items.filter(function(it){return it&&(it.name||'').trim();}));
+      if(data.error){errMsgs.push((f+1)+'장: '+data.error);}
+      else if(Array.isArray(data.items)){
+        newItems=newItems.concat(data.items.filter(function(it){return it&&(it.name||'').trim();}));
       }
-    }catch(e){
-      errMsgs.push((f+1)+'장: '+e.message);
-    }
+    }catch(e){errMsgs.push((f+1)+'장: '+e.message);}
   }
-
-  if(!allItems.length){
-    openOrderModal(
-      '<p style="color:#d97706;font-weight:700;">⚠️ 주문 항목을 인식하지 못했습니다.</p>'+
-      (errMsgs.length?'<p style="font-size:12px;color:#dc2626;margin-top:6px;">'+_esc(errMsgs.join(' / '))+'</p>':''),
-      ''
-    );
+  if(!newItems.length&&!append){
+    openOrderModal('<p style="color:#d97706;font-weight:700;">⚠️ 주문 항목을 인식하지 못했습니다.</p>'+
+      (errMsgs.length?'<p style="font-size:12px;color:#dc2626;margin-top:6px;">'+_esc(errMsgs.join(' / '))+'</p>':''),'');
     return;
   }
-
-  var before=allItems.length;
-  allItems=deduplicateOrderItems(allItems);
-  var removed=before-allItems.length;
-
-  _orderItems=allItems;
-  showOrderPreview(total,removed,errMsgs);
+  var combined=append?_orderItems.concat(newItems):newItems;
+  var before=combined.length;
+  combined=deduplicateOrderItems(combined);
+  _orderItems=combined;
+  showOrderPreview(total,before-combined.length,errMsgs);
 }
 
 function showOrderPreview(fileCount,dedupRemoved,errMsgs){
