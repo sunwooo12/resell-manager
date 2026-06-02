@@ -988,7 +988,7 @@ function calcSell(id,buyPrice){
 }
 
 // ── 입고 스캔 ──────────────────────────────────────────
-var _tsjLoaded=false,_lastScanIds=null,_lastOcrRaw='',_scanCodes=[];
+var _tsjLoaded=false,_lastScanIds=null,_lastOcrRaw='',_scanCodes=[],_scanMatchedIds=[];
 
 function loadTesseract(cb){
   if(_tsjLoaded){cb();return;}
@@ -1136,11 +1136,22 @@ async function undoScanReceive(){
 
 async function applyScanReceive(ids){
   closeScanModal();
-  var ok=await Promise.all(ids.map(function(id){return sb.from('items').update({status:'보유중'}).eq('id',id);}));
-  var err=ok.find(function(r){return r.error;});
-  if(err){alert('오류: '+err.error.message);return;}
-  showUndoToast(ids);
-  load();
+  try{
+    var ok=await Promise.all(ids.map(function(id){return sb.from('items').update({status:'보유중'}).eq('id',id);}));
+    var err=ok.find(function(r){return r.error;});
+    if(err){alert('오류: '+err.error.message);return;}
+    showUndoToast(ids);
+    load();
+  }catch(e){alert('입고 처리 오류: '+e.message);}
+}
+
+function execBulkScanReceive(){
+  var sel=_scanMatchedIds.filter(function(id){
+    var el=document.getElementById('sc'+id);
+    return el&&el.checked;
+  });
+  if(!sel.length){alert('항목을 선택해주세요.');return;}
+  applyScanReceive(sel);
 }
 
 function renderScanItem(it,i,showCheck){
@@ -1331,15 +1342,11 @@ function showScanResult(codes){
       '<button class="sb" style="background:#0d9488;" onclick="applyScanReceive([\''+it.id+'\'])">입고 처리</button>'+
       '<button class="cb" onclick="closeScanModal()">취소</button>');
   }else{
+    _scanMatchedIds=matched.map(function(i){return i.id;});
     var rows=matched.map(function(it,i){return renderScanItem(it,i,true);}).join('');
     openScanModal(
       '<p><b>'+matched.length+'개 매칭</b> — 입고 처리할 항목을 선택하세요 (FIFO 순):</p>'+rows,
-      '<button class="sb" style="background:#0d9488;" onclick="(function(){'+
-        'var ids='+JSON.stringify(matched.map(function(i){return i.id;}))+';'+
-        'var sel=ids.filter(function(id){var el=document.getElementById(\'sc\'+id);return el&&el.checked;});'+
-        'if(!sel.length){alert(\'항목을 선택해주세요.\');return;}'+
-        'applyScanReceive(sel);'+
-      '})()">선택 입고 처리</button>'+
+      '<button class="sb" style="background:#0d9488;" onclick="execBulkScanReceive()">선택 입고 처리</button>'+
       '<button class="cb" onclick="closeScanModal()">취소</button>');
   }
 }
