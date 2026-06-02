@@ -988,7 +988,7 @@ function calcSell(id,buyPrice){
 }
 
 // ── 입고 스캔 ──────────────────────────────────────────
-var _tsjLoaded=false,_lastScanIds=null;
+var _tsjLoaded=false,_lastScanIds=null,_lastOcrRaw='',_scanCodes=[];
 
 function loadTesseract(cb){
   if(_tsjLoaded){cb();return;}
@@ -999,14 +999,35 @@ function loadTesseract(cb){
 }
 
 function extractProductCodes(text){
-  var re=/\b([A-Z]{1,4}[-]?[0-9]{3,6}[-]?[A-Z0-9]{0,6}|[A-Z][A-Z0-9]{5,14})\b/g;
-  var found=[],m;
-  while((m=re.exec(text.toUpperCase()))!==null){
-    var v=m[1];
-    if(/^\d+$/.test(v)||v.length<4)continue;
-    found.push(v);
+  var lines=text.split(/[\n\r]+/);
+  function isExcluded(c){
+    if(c.length<4)return true;
+    if(/^\d+$/.test(c))return true;                        // 순수 숫자
+    if(/^0[0-9]{1,2}[-\s]/.test(c))return true;          // 전화번호 010-
+    if(/^20[2-9][0-9]/.test(c)||/^19[0-9]{2}/.test(c))return true; // 날짜
+    if(/^\d{8,}/.test(c.replace(/-/g,'')))return true;   // 긴 바코드/송장
+    return false;
   }
-  return [...new Set(found)];
+  function extractFrom(str){
+    var s=str.toUpperCase(),res=[],m;
+    var pats=[
+      /\b([A-Z]{1,4}[-]?[0-9]{3,6}[-]?[A-Z0-9]{0,6})\b/g, // JR4025, DV0833-100
+      /\b([A-Z][A-Z0-9]{5,14})\b/g,                         // MXP93KH 등
+      /\b([0-9]{5,6}-[0-9]{2,4})\b/g                        // 206750-001
+    ];
+    pats.forEach(function(re){re.lastIndex=0;while((m=re.exec(s))!==null){var v=m[1];if(!isExcluded(v)&&!res.includes(v))res.push(v);}});
+    return res;
+  }
+  // 품번 라벨 근처를 우선 추출
+  var priority=[],labelRe=/품번|상품\s*코드|MODEL\s*N|STYLE\s*N|ARTICLE|ITEM\s*N/i;
+  lines.forEach(function(line,i){
+    if(labelRe.test(line)){
+      extractFrom(line+' '+(lines[i+1]||'')).forEach(function(c){if(!priority.includes(c))priority.push(c);});
+    }
+  });
+  var all=extractFrom(text),result=priority.slice();
+  all.forEach(function(c){if(!result.includes(c))result.push(c);});
+  return result;
 }
 
 function normCode(s){return (s||'').toLowerCase().replace(/[-_ /]/g,'');}
@@ -1102,6 +1123,70 @@ function renderScanItem(it,i,showCheck){
     '</'+(showCheck?'label':'div')+'>';
 }
 
+function _ocrBlock(){
+  return '<details style="margin-top:10px;"><summary style="cursor:pointer;font-size:12px;color:#9ca3af;">OCR 원문 보기</summary>'+
+    '<pre style="font-size:11px;white-space:pre-wrap;margin-top:6px;color:#6b7280;max-height:120px;overflow:auto;">'+_lastOcrRaw.slice(0,500)+'</pre></details>';
+}
+
+function showNoMatchResult(codes){
+  var similar=findSimilarItems(codes);
+  var hint=codes.length?'<div style="font-size:12px;color:#6b7280;margin-top:4px;">인식된 품번 후보: <b>'+codes.join(', ')+'</b></div>':'';
+  if(similar.length>0){
+    var simRows=similar.map(function(it,i){return renderScanItem(it,i,false);}).join('');
+    openScanModal(
+      '<p style="color:#d97706;font-weight:700;">⚠️ 주문완료 정확 매칭 없음 — 유사 상품 발견</p>'+hint+
+      '<p style="font-size:12px;color:#6b7280;margin:8px 0;">혹시 아래 상품 중 하나인가요?</p>'+
+      '<div>'+simRows+'</div>'+_ocrBlock(),'');
+  }else{
+    openScanModal(
+      '<p style="color:#dc2626;font-weight:700;">⚠️ 주문완료 항목 중 매칭된 상품이 없습니다</p>'+hint+_ocrBlock(),'');
+  }
+}
+
+function showScanResult(codes){
+  var matched=findOrderedItems(codes);
+  if(matched.length===0){
+    if(codes.length>1){
+      var btns=codes.map(function(c){
+        return '<button onclick="showScanResult([\''+ c.replace(/'/g,"\\'")+'\'])" '+
+          'style="padding:8px 16px;margin:4px;background:#f3f4f6;border:1px solid #d1d5db;border-radius:8px;'+
+          'cursor:pointer;font-family:monospace;font-size:14px;font-weight:700;">'+c+'</button>';
+      }).join('');
+      openScanModal(
+        '<p style="font-weight:700;margin-bottom:4px;">품번 후보를 선택해주세요</p>'+
+        '<p style="font-size:12px;color:#6b7280;margin-bottom:10px;">주문완료 항목과 매칭이 안 됐습니다. 올바른 품번을 탭하세요.</p>'+
+        '<div style="display:flex;flex-wrap:wrap;">'+btns+'</div>'+_ocrBlock(),
+        '<button class="cb" style="width:100%;margin-top:4px;" onclick="showNoMatchResult(_scanCodes)">전체 후보로 유사 검색</button>');
+    }else{
+      showNoMatchResult(codes);
+    }
+  }else if(matched.length===1){
+    var it=matched[0];
+    openScanModal(
+      '<p style="font-size:15px;font-weight:700;margin-bottom:8px;">'+scanLabel(it)+'</p>'+
+      '<div style="background:#f9fafb;border-radius:8px;padding:10px 14px;font-size:12px;color:#6b7280;line-height:2;">'+
+        '<div>품번: <b style="color:#374151;">'+(it.product_code||'-')+'</b></div>'+
+        '<div>사이즈: <b style="color:#374151;">'+(it.size||'-')+'</b></div>'+
+        '<div>매입일: <b style="color:#374151;">'+(it.buy_date||'-')+'</b></div>'+
+        '<div>매입가: <b style="color:#374151;">'+((it.buy_price||0).toLocaleString())+'원</b></div>'+
+      '</div>'+
+      '<p style="margin-top:12px;">이 상품을 <b style="color:#0d9488;">보유중</b>으로 전환할까요?</p>',
+      '<button class="sb" style="background:#0d9488;" onclick="applyScanReceive([\''+it.id+'\'])">입고 처리</button>'+
+      '<button class="cb" onclick="closeScanModal()">취소</button>');
+  }else{
+    var rows=matched.map(function(it,i){return renderScanItem(it,i,true);}).join('');
+    openScanModal(
+      '<p><b>'+matched.length+'개 매칭</b> — 입고 처리할 항목을 선택하세요 (FIFO 순):</p>'+rows,
+      '<button class="sb" style="background:#0d9488;" onclick="(function(){'+
+        'var ids='+JSON.stringify(matched.map(function(i){return i.id;}))+';'+
+        'var sel=ids.filter(function(id){var el=document.getElementById(\'sc\'+id);return el&&el.checked;});'+
+        'if(!sel.length){alert(\'항목을 선택해주세요.\');return;}'+
+        'applyScanReceive(sel);'+
+      '})()">선택 입고 처리</button>'+
+      '<button class="cb" onclick="closeScanModal()">취소</button>');
+  }
+}
+
 async function runIncomingScan(input){
   if(!input.files||!input.files[0])return;
   var file=input.files[0];
@@ -1111,52 +1196,9 @@ async function runIncomingScan(input){
     document.getElementById('scanBody').innerHTML='<div style="text-align:center;color:#6b7280;">🔍 인식 중... (최대 20초)</div>';
     try{
       var result=await Tesseract.recognize(file,['eng','kor'],{});
-      var raw=result.data.text;
-      var codes=extractProductCodes(raw);
-      var matched=findOrderedItems(codes);
-      var ocrBlock='<details style="margin-top:10px;"><summary style="cursor:pointer;font-size:12px;color:#9ca3af;">OCR 원문 보기</summary>'+
-        '<pre style="font-size:11px;white-space:pre-wrap;margin-top:6px;color:#6b7280;max-height:120px;overflow:auto;">'+raw.slice(0,500)+'</pre></details>';
-      var codeHint=codes.length?'<div style="font-size:12px;color:#6b7280;margin-top:4px;">인식된 품번 후보: <b>'+codes.join(', ')+'</b></div>':'';
-
-      if(matched.length===0){
-        var similar=findSimilarItems(codes);
-        if(similar.length>0){
-          var simRows=similar.map(function(it,i){return renderScanItem(it,i,false);}).join('');
-          openScanModal(
-            '<p style="color:#d97706;font-weight:700;">⚠️ 주문완료 정확 매칭 없음 — 유사 상품이 있습니다</p>'+
-            codeHint+
-            '<p style="font-size:12px;color:#6b7280;margin:8px 0;">혹시 아래 상품 중 하나인가요?</p>'+
-            '<div>'+simRows+'</div>'+ocrBlock,'');
-        }else{
-          openScanModal(
-            '<p style="color:#dc2626;font-weight:700;">⚠️ 주문완료 항목 중 매칭된 상품이 없습니다</p>'+
-            codeHint+ocrBlock,'');
-        }
-      }else if(matched.length===1){
-        var it=matched[0];
-        openScanModal(
-          '<p style="font-size:15px;font-weight:700;margin-bottom:8px;">'+scanLabel(it)+'</p>'+
-          '<div style="background:#f9fafb;border-radius:8px;padding:10px 14px;font-size:12px;color:#6b7280;line-height:2;">'+
-            '<div>품번: <b style="color:#374151;">'+(it.product_code||'-')+'</b></div>'+
-            '<div>사이즈: <b style="color:#374151;">'+(it.size||'-')+'</b></div>'+
-            '<div>매입일: <b style="color:#374151;">'+(it.buy_date||'-')+'</b></div>'+
-            '<div>매입가: <b style="color:#374151;">'+((it.buy_price||0).toLocaleString())+'원</b></div>'+
-          '</div>'+
-          '<p style="margin-top:12px;">이 상품을 <b style="color:#0d9488;">보유중</b>으로 전환할까요?</p>',
-          '<button class="sb" style="background:#0d9488;" onclick="applyScanReceive([\''+it.id+'\'])">입고 처리</button>'+
-          '<button class="cb" onclick="closeScanModal()">취소</button>');
-      }else{
-        var rows=matched.map(function(it,i){return renderScanItem(it,i,true);}).join('');
-        openScanModal(
-          '<p><b>'+matched.length+'개 매칭</b> — 입고 처리할 항목을 선택하세요 (FIFO 순):</p>'+rows,
-          '<button class="sb" style="background:#0d9488;" onclick="(function(){'+
-            'var ids='+JSON.stringify(matched.map(function(i){return i.id;}))+';'+
-            'var sel=ids.filter(function(id){var el=document.getElementById(\'sc\'+id);return el&&el.checked;});'+
-            'if(!sel.length){alert(\'항목을 선택해주세요.\');return;}'+
-            'applyScanReceive(sel);'+
-          '})()">선택 입고 처리</button>'+
-          '<button class="cb" onclick="closeScanModal()">취소</button>');
-      }
+      _lastOcrRaw=result.data.text;
+      _scanCodes=extractProductCodes(_lastOcrRaw);
+      showScanResult(_scanCodes);
     }catch(e){
       openScanModal('<p style="color:#dc2626;">❌ OCR 오류: '+e.message+'</p>','');
     }
