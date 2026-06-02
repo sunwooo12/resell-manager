@@ -171,6 +171,7 @@ button.dfb.on{background:#1a1a1a;color:#fff;border-color:#1a1a1a;}
       </select>
       <button class="fb" id="sortBtn" onclick="sortAsc=!sortAsc;document.getElementById('sortBtn').textContent=sortAsc?'오래된순 ↑':'최신순 ↓';render()">오래된순 ↑</button>
       <button class="ab" onclick="go(1)">+ 매입 등록</button>
+      <button class="ab" style="background:#7c3aed;" onclick="document.getElementById('orderFile').click()">📷 주문내역 등록</button>
       <button class="ab" style="background:#0d9488;" onclick="document.getElementById('scanFile').click()">📷 입고 스캔</button>
     </div>
     <div class="date-filter-bar">
@@ -263,7 +264,6 @@ button.dfb.on{background:#1a1a1a;color:#fff;border-color:#1a1a1a;}
       </div>
       <div class="fa">
         <button class="sb" onclick="addItem()">등록하기</button>
-        <button class="sb" style="background:#7c3aed;" onclick="document.getElementById('orderFile').click()">📷 주문내역으로 등록</button>
         <button class="cb" onclick="go(0)">취소</button>
       </div>
     </div>
