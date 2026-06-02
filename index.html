@@ -171,6 +171,7 @@ button.dfb.on{background:#1a1a1a;color:#fff;border-color:#1a1a1a;}
       </select>
       <button class="fb" id="sortBtn" onclick="sortAsc=!sortAsc;document.getElementById('sortBtn').textContent=sortAsc?'오래된순 ↑':'최신순 ↓';render()">오래된순 ↑</button>
       <button class="ab" onclick="go(1)">+ 매입 등록</button>
+      <button class="ab" style="background:#0d9488;" onclick="document.getElementById('scanFile').click()">📷 입고 스캔</button>
     </div>
     <div class="date-filter-bar">
       <span style="font-size:12px;color:#888;white-space:nowrap;">매입일</span>
@@ -186,6 +187,17 @@ button.dfb.on{background:#1a1a1a;color:#fff;border-color:#1a1a1a;}
     <div id="itemList" class="list"><div class="loading">불러오는 중...</div></div>
     <div id="bundleBarWrap"></div>
   </div>
+
+  <!-- 입고 스캔 모달 -->
+  <div id="scanModal" class="modal-bg" style="display:none;" onclick="if(event.target===this)closeScanModal()">
+    <div class="modal-box">
+      <div class="modal-title">📷 입고 스캔 결과</div>
+      <div id="scanBody" style="font-size:13px;line-height:1.7;"></div>
+      <div id="scanActions" style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap;"></div>
+      <button class="cb" style="margin-top:12px;width:100%;" onclick="closeScanModal()">닫기</button>
+    </div>
+  </div>
+  <input type="file" id="scanFile" accept="image/*" capture="environment" style="display:none;" onchange="runIncomingScan(this)">
 
   <!-- 묶음발송 모달 -->
   <div id="bundleModal" class="modal-bg" style="display:none;" onclick="if(event.target===this)closeBundleModal()">
@@ -974,6 +986,114 @@ function calcSell(id,buyPrice){
     '<div style="width:1px;background:#e2e0da;"></div>'+
     '<div><div style="font-size:11px;color:#888;margin-bottom:3px;">마진율</div><div style="font-size:14px;font-weight:700;color:'+gc+';">'+(rate>=0?'+':'')+rate+'%</div></div>';
 }
+
+// ── 입고 스캔 ──────────────────────────────────────────
+var _tsjLoaded=false;
+function loadTesseract(cb){
+  if(_tsjLoaded){cb();return;}
+  var s=document.createElement('script');
+  s.src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+  s.onload=function(){_tsjLoaded=true;cb();};
+  document.head.appendChild(s);
+}
+
+function extractProductCodes(text){
+  var re=/\b([A-Z]{1,4}[-]?[0-9]{3,6}[-]?[A-Z0-9]{0,6}|[A-Z][A-Z0-9]{5,14})\b/g;
+  var found=[],m;
+  while((m=re.exec(text.toUpperCase()))!==null){
+    var v=m[1];
+    if(/^\d+$/.test(v)||v.length<4)continue;
+    found.push(v);
+  }
+  return [...new Set(found)];
+}
+
+function findOrderedItems(codes){
+  var results=[];
+  codes.forEach(function(c){
+    items.forEach(function(it){
+      if(it.status==='주문완료'&&it.product_code&&
+         it.product_code.toUpperCase().indexOf(c)!==-1){
+        if(!results.find(function(r){return r.id===it.id;}))results.push(it);
+      }
+    });
+  });
+  // FIFO: 오래된 매입 우선
+  results.sort(function(a,b){return (a.buy_date||'').localeCompare(b.buy_date||'')||(a.created_at||'').localeCompare(b.created_at||'');});
+  return results;
+}
+
+function closeScanModal(){document.getElementById('scanModal').style.display='none';}
+
+function openScanModal(body,actions){
+  document.getElementById('scanBody').innerHTML=body;
+  document.getElementById('scanActions').innerHTML=actions||'';
+  document.getElementById('scanModal').style.display='flex';
+}
+
+async function applyScanReceive(ids){
+  closeScanModal();
+  var ok=await Promise.all(ids.map(function(id){
+    return sb.from('items').update({status:'보유중'}).eq('id',id);
+  }));
+  var err=ok.find(function(r){return r.error;});
+  if(err){alert('오류: '+err.error.message);return;}
+  load();
+}
+
+async function runIncomingScan(input){
+  if(!input.files||!input.files[0])return;
+  var file=input.files[0];
+  input.value='';
+  openScanModal('<div style="text-align:center;color:#6b7280;">⏳ Tesseract 로딩 중...</div>','');
+  loadTesseract(async function(){
+    document.getElementById('scanBody').innerHTML='<div style="text-align:center;color:#6b7280;">🔍 인식 중... (최대 20초)</div>';
+    try{
+      var result=await Tesseract.recognize(file,['eng','kor'],{});
+      var raw=result.data.text;
+      var codes=extractProductCodes(raw);
+      var matched=findOrderedItems(codes);
+
+      if(matched.length===0){
+        var hint=codes.length?'<br><b>인식된 품번 후보:</b> '+codes.join(', '):'';
+        openScanModal(
+          '<p style="color:#dc2626;">⚠️ 주문완료 항목 중 매칭된 상품이 없습니다.'+hint+'</p>'+
+          '<details style="margin-top:8px;"><summary style="cursor:pointer;font-size:12px;color:#9ca3af;">OCR 원문 보기</summary>'+
+          '<pre style="font-size:11px;white-space:pre-wrap;margin-top:6px;color:#6b7280;">'+raw.slice(0,400)+'</pre></details>','');
+      }else if(matched.length===1){
+        var it=matched[0];
+        var label=(it.brand?it.brand+' ':'')+it.name+(it.size?' ('+it.size+')':'');
+        openScanModal(
+          '<p><b>'+label+'</b></p>'+
+          '<p style="color:#6b7280;font-size:12px;">품번: '+(it.product_code||'-')+'<br>매입일: '+(it.buy_date||'-')+'</p>'+
+          '<p>이 상품을 <b style="color:#0d9488;">보유중</b>으로 전환할까요?</p>',
+          '<button class="sb" style="background:#0d9488;" onclick="applyScanReceive([\''+it.id+'\'])">입고 처리</button>'+
+          '<button class="cb" onclick="closeScanModal()">취소</button>');
+      }else{
+        // 여러 개 매칭 — 목록 표시, 체크박스 선택
+        var rows=matched.map(function(it,i){
+          var label=(it.brand?it.brand+' ':'')+it.name+(it.size?' ('+it.size+')':'');
+          return '<label style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #f0f0f0;">'+
+            '<input type="checkbox" id="sc'+it.id+'"'+(i===0?' checked':'')+' style="width:16px;height:16px;">'+
+            '<span><b>'+label+'</b><br><span style="font-size:11px;color:#9ca3af;">'+
+            (it.product_code||'')+(it.buy_date?' · '+it.buy_date:'')+'</span></span></label>';
+        }).join('');
+        openScanModal(
+          '<p><b>'+matched.length+'개 매칭</b> — 입고 처리할 항목을 선택하세요 (FIFO 순):</p>'+rows,
+          '<button class="sb" style="background:#0d9488;" onclick="(function(){'+
+            'var ids='+JSON.stringify(matched.map(function(i){return i.id;}))+';'+
+            'var sel=ids.filter(function(id){var el=document.getElementById(\'sc\'+id);return el&&el.checked;});'+
+            'if(!sel.length){alert(\'항목을 선택해주세요.\');return;}'+
+            'applyScanReceive(sel);'+
+          '})()">선택 입고 처리</button>'+
+          '<button class="cb" onclick="closeScanModal()">취소</button>');
+      }
+    }catch(e){
+      openScanModal('<p style="color:#dc2626;">❌ OCR 오류: '+e.message+'</p>','');
+    }
+  });
+}
+// ────────────────────────────────────────────────────────
 
 async function addItem(){
   var name=document.getElementById('fn').value.trim();
