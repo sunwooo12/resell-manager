@@ -176,6 +176,7 @@ button.dfb.on{background:#1a1a1a;color:#fff;border-color:#1a1a1a;}
         <button class="ab" style="margin-left:0;" onclick="go(1)">+ 매입 등록</button>
         <button class="ab" style="margin-left:0;background:#7c3aed;" onclick="openOrderPicker()">📷 주문내역 등록</button>
         <button class="ab" style="margin-left:0;background:#0d9488;" onclick="openScanPicker()">📷 입고 스캔</button>
+        <button class="ab" style="margin-left:0;background:#d97706;" onclick="openShipScanModal()">📦 발송 스캔</button>
       </div>
     </div>
     <div class="date-filter-bar">
@@ -216,6 +217,16 @@ button.dfb.on{background:#1a1a1a;color:#fff;border-color:#1a1a1a;}
       <button class="cb" style="margin-top:10px;width:100%;" onclick="closeOrderModal()">닫기</button>
     </div>
   </div>
+
+  <!-- 발송 스캔 모달 -->
+  <div id="shipScanModal" class="modal-bg" style="display:none;" onclick="if(event.target===this)closeShipScanModal()">
+    <div class="modal-box" style="width:min(480px,96vw);">
+      <div class="modal-title">📦 발송 스캔</div>
+      <div id="shipScanBody" style="font-size:13px;line-height:1.6;"></div>
+      <button class="cb" style="margin-top:10px;width:100%;" onclick="closeShipScanModal()">닫기</button>
+    </div>
+  </div>
+  <input type="file" id="shipScanFile" accept="image/*" capture="environment" style="display:none;" onchange="runShipScan(this)">
 
   <!-- 묶음발송 모달 -->
   <div id="bundleModal" class="modal-bg" style="display:none;" onclick="if(event.target===this)closeBundleModal()">
@@ -1483,6 +1494,147 @@ async function _runScanFiles(files){
       '<button class="cb" onclick="closeScanModal()">취소</button>');
   }
 }
+// ── 발송 스캔 ─────────────────────────────────────────────
+var _shipBox=[];
+
+function findHeldForDispatch(codes){
+  var ncs=codes.map(normCode);
+  var usedIds=_shipBox.map(function(x){return x.id;});
+  var r=[];
+  ncs.forEach(function(nc){
+    items.forEach(function(it){
+      if(it.status==='보유중'&&it.product_code&&normCode(it.product_code).indexOf(nc)!==-1)
+        if(!r.find(function(x){return x.id===it.id;})&&usedIds.indexOf(it.id)===-1)r.push(it);
+    });
+  });
+  return fifoSort(r);
+}
+
+function _shipFbOk(msg){return '<div style="background:#dcfce7;color:#16a34a;border-radius:8px;padding:8px 12px;font-size:13px;font-weight:600;">'+_esc(msg)+'</div>';}
+function _shipFbWarn(msg){return '<div style="background:#fef3c7;color:#92400e;border-radius:8px;padding:8px 12px;font-size:13px;font-weight:600;">⚠️ '+_esc(msg)+'</div>';}
+function _shipFbErr(msg){return '<div style="background:#fee2e2;color:#dc2626;border-radius:8px;padding:8px 12px;font-size:13px;font-weight:600;">❌ '+_esc(msg)+'</div>';}
+function _shipManualInput(){
+  return '<div style="margin-top:8px;">'+
+    '<input id="_shipc" type="text" placeholder="품번 직접 입력 후 Enter" autocomplete="off" '+
+    'style="width:100%;padding:9px;border:1.5px solid #3b82f6;border-radius:8px;font-size:14px;font-family:monospace;box-sizing:border-box;" '+
+    'onkeydown="if(event.key===\'Enter\')confirmShipCode()">'+
+    '<button class="sb" style="width:100%;margin-top:6px;background:#3b82f6;" onclick="confirmShipCode()">이 품번으로 추가</button>'+
+  '</div>';
+}
+
+function _renderShipScanModal(feedback){
+  var cnt=_shipBox.length;
+  var rows=cnt
+    ? _shipBox.map(function(it,i){
+        return '<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid #f0f0f0;">'+
+          '<span style="flex:1;"><b>'+_esc(scanLabel(it))+'</b>'+
+            '<div style="font-size:11px;color:#9ca3af;margin-top:2px;">'+_esc(scanDetail(it))+'</div></span>'+
+          '<button onclick="removeFromShipBox('+i+')" style="background:none;border:none;cursor:pointer;font-size:20px;color:#9ca3af;line-height:1;flex-shrink:0;padding:0 4px;">×</button>'+
+        '</div>';
+      }).join('')
+    : '<div style="text-align:center;color:#9ca3af;padding:16px 0;font-size:13px;">아직 담긴 상품 없음</div>';
+
+  var dispBtn=cnt
+    ? '<button class="sb" style="width:100%;margin-top:10px;background:#ef4444;" onclick="confirmShipDispatch()">📦 발송완료 처리 ('+cnt+'개)</button>'
+    : '';
+
+  document.getElementById('shipScanBody').innerHTML=
+    '<div style="font-weight:700;margin-bottom:8px;">이번 박스: '+cnt+'개</div>'+
+    '<div style="max-height:240px;overflow-y:auto;margin-bottom:10px;">'+rows+'</div>'+
+    (feedback?'<div style="margin-bottom:10px;">'+feedback+'</div>':'')+
+    '<button class="sb" style="width:100%;" onclick="document.getElementById(\'shipScanFile\').click()">📷 상품 스캔</button>'+
+    dispBtn;
+}
+
+function openShipScanModal(){
+  _shipBox=[];
+  document.getElementById('shipScanModal').style.display='flex';
+  _renderShipScanModal();
+}
+
+function closeShipScanModal(){
+  if(_shipBox.length){
+    if(!confirm('이번 박스('+_shipBox.length+'개)가 아직 발송완료 처리 안 됐어요. 닫을까요?'))return;
+  }
+  _shipBox=[];
+  document.getElementById('shipScanModal').style.display='none';
+}
+
+function removeFromShipBox(idx){
+  _shipBox.splice(idx,1);
+  _renderShipScanModal();
+}
+
+async function runShipScan(input){
+  if(!input.files||!input.files[0])return;
+  var file=input.files[0];
+  input.value='';
+  await _processShipScan(file);
+}
+
+async function _processShipScan(file){
+  _renderShipScanModal('<div style="text-align:center;color:#6b7280;padding:8px 0;">🤖 AI 품번 인식 중...</div>');
+  try{
+    var b64=await resizeAndEncode(file,1500);
+    var resp=await fetch('/api/scan',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image:b64,mediaType:'image/jpeg'})});
+    var data=await resp.json();
+    if(data.error){
+      _renderShipScanModal(_shipFbErr('오류: '+_esc(data.error))+_shipManualInput());
+      return;
+    }
+    var codes=[];
+    if(data.productCode)codes.push(data.productCode);
+    if(Array.isArray(data.candidates))data.candidates.forEach(function(c){if(c&&!codes.includes(c))codes.push(c);});
+    if(!codes.length){
+      _renderShipScanModal(_shipFbWarn('품번을 인식하지 못했습니다')+_shipManualInput());
+      return;
+    }
+    var matched=findHeldForDispatch(codes);
+    if(!matched.length){
+      var codeStr=codes.join(', ');
+      var alreadySent=items.filter(function(it){
+        return (it.status==='발송완료'||it.status==='판매완료')&&it.product_code&&codes.some(function(c){return normCode(it.product_code).indexOf(normCode(c))!==-1;});
+      });
+      var hint=alreadySent.length?' (이미 발송된 항목 있음)':'';
+      _renderShipScanModal(_shipFbWarn('보유중 매칭 없음: '+codeStr+hint)+_shipManualInput());
+      return;
+    }
+    var pick=matched[0];
+    _shipBox.push(pick);
+    _renderShipScanModal(_shipFbOk('✅ 추가: '+scanLabel(pick)));
+  }catch(e){
+    _renderShipScanModal(_shipFbErr('AI 오류: '+e.message)+_shipManualInput());
+  }
+}
+
+function confirmShipCode(){
+  var val=((document.getElementById('_shipc')||{}).value||'').trim();
+  if(!val){alert('품번을 입력해주세요.');return;}
+  var matched=findHeldForDispatch([val]);
+  if(!matched.length){
+    _renderShipScanModal(_shipFbWarn('보유중에 품번 "'+val+'"이 없습니다')+_shipManualInput());
+    return;
+  }
+  _shipBox.push(matched[0]);
+  _renderShipScanModal(_shipFbOk('✅ 추가: '+scanLabel(matched[0])));
+}
+
+async function confirmShipDispatch(){
+  if(!_shipBox.length){alert('발송할 상품이 없습니다.');return;}
+  if(!sb){alert('설정 탭에서 Supabase 키를 먼저 입력해주세요.');return;}
+  var ids=_shipBox.map(function(it){return it.id;});
+  try{
+    var results=await Promise.all(ids.map(function(id){return sb.from('items').update({status:'발송완료'}).eq('id',id);}));
+    var err=results.find(function(r){return r.error;});
+    if(err){alert('오류: '+err.error.message);return;}
+    var cnt=_shipBox.length;
+    _shipBox=[];
+    document.getElementById('shipScanModal').style.display='none';
+    alert(cnt+'개를 발송완료 처리했습니다!');
+    load();
+  }catch(e){alert('발송 처리 오류: '+e.message);}
+}
+
 // ── 픽커 & 붙여넣기 ──────────────────────────────────────
 function openScanPicker(){
   openScanModal(
@@ -1502,8 +1654,17 @@ function openOrderPicker(){
   _orderItems=[];
   _orderPendingImages=[];
   _orderPickerMode=true;
-  _showOrderPickerUI();
+  var cache=_loadOrderCache();
+  var banner='';
+  if(cache&&cache.items&&cache.items.length){
+    banner='<div style="background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;padding:10px 12px;margin-bottom:12px;display:flex;align-items:center;gap:10px;">'+
+      '<span style="font-size:13px;flex:1;">📋 이전 분석 결과 있음 ('+cache.items.length+'건)</span>'+
+      '<button class="sb" style="padding:5px 12px;font-size:12px;background:#d97706;flex-shrink:0;" onclick="resumeOrderCache()">이어서 등록</button>'+
+    '</div>';
+  }
+  _showOrderPickerUI(banner);
 }
+function _showOrderPickerUI(banner){openOrderModal((banner||'')+_orderPickerBody(),'');}
 
 function _orderPickerBody(){
   var cnt=_orderPendingImages.length;
@@ -1530,8 +1691,6 @@ function _orderPickerBody(){
   '</div>'+
   '<button id="_orderAnalyzeBtn" class="sb" style="'+btnStyle+'" onclick="analyzeOrderImages()">분석하기 ('+cnt+'장)</button>';
 }
-
-function _showOrderPickerUI(){openOrderModal(_orderPickerBody(),'');}
 
 function _updateOrderPickerUI(){
   var cnt=_orderPendingImages.length;
@@ -1606,18 +1765,48 @@ document.addEventListener('paste',function(e){
   if(!imgs.length)return;
   var orderOpen=document.getElementById('orderModal').style.display!=='none';
   var scanOpen=document.getElementById('scanModal').style.display!=='none';
+  var shipOpen=document.getElementById('shipScanModal').style.display!=='none';
   if(orderOpen){
     if(_orderPickerMode)addOrderImages(imgs);
     else _processOrderFiles(imgs,_orderItems.length>0);
     return;
   }
+  if(shipOpen){_processShipScan(imgs[0]);return;}
   if(scanOpen){_runScanFiles(imgs);return;}
 });
 
 // ── 주문내역 캡처 등록 ────────────────────────────────────
 var _orderItems=[],_orderPendingImages=[],_orderPickerMode=false;
 
-function closeOrderModal(){document.getElementById('orderModal').style.display='none';}
+function _saveOrderCache(){
+  if(!_orderItems.length)return;
+  try{localStorage.setItem('_orderCache',JSON.stringify({items:_orderItems,savedAt:Date.now()}));}catch(e){}
+}
+function _loadOrderCache(){
+  try{var s=localStorage.getItem('_orderCache');return s?JSON.parse(s):null;}catch(e){return null;}
+}
+function _clearOrderCache(){
+  try{localStorage.removeItem('_orderCache');}catch(e){}
+}
+function resumeOrderCache(){
+  var cache=_loadOrderCache();
+  if(!cache||!cache.items||!cache.items.length)return;
+  _orderItems=cache.items;
+  _orderPickerMode=false;
+  _orderPendingImages=[];
+  showOrderPreview(0,0,[]);
+}
+function closeOrderModal(){
+  var hasUnsaved=_orderItems.length>0||_orderPendingImages.length>0;
+  if(hasUnsaved){
+    if(!confirm('저장 안 됐어요. 닫을까요?'))return;
+    _saveOrderCache();
+  }
+  _orderPickerMode=false;
+  _orderItems=[];
+  _orderPendingImages=[];
+  document.getElementById('orderModal').style.display='none';
+}
 function openOrderModal(body,actions){
   document.getElementById('orderBody').innerHTML=body;
   document.getElementById('orderActions').innerHTML=actions||'';
@@ -1760,7 +1949,9 @@ async function confirmOrderRegister(){
   if(!rows.length){alert('등록할 항목이 없습니다. 상품명과 매입가를 확인해주세요.');return;}
   var res=await sb.from('items').insert(rows);
   if(res.error){alert('등록 실패: '+res.error.message);return;}
-  closeOrderModal();
+  _clearOrderCache();
+  _orderItems=[];
+  document.getElementById('orderModal').style.display='none';
   alert(rows.length+'건을 주문완료로 등록했습니다!');
   load();
 }
