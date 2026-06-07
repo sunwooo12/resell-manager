@@ -20,7 +20,7 @@ export default async function handler(req, res) {
     '{"total_paid":0,"items":[{"name":"","brand":"","size":"","product_code":"","source":"","list_price":0,"quantity":1,"buy_date":"","order_url":""}]}\n' +
     '\n' +
     '- total_paid: 할인·쿠폰·포인트 적용 후 실제 결제금액(배송비 제외). 확인 불가면 0.\n' +
-    '- list_price: 각 상품의 개당 표시 가격(할인 전 개별 정가) 정수.\n' +
+    '- list_price: 해당 줄의 표시 금액 합계(개당 가격 × 수량, 할인 전). 확인 불가면 0.\n' +
     '- buy_date: YYYY-MM-DD. 캡처에 날짜가 보이면 반드시 그 날짜 사용. 안 보이거나 불확실하면 빈 문자열("").\n' +
     '⚠️ items에 넣지 말 것: 합계·총금액·배송비·쿠폰할인·포인트·주문번호·요약줄·헤더줄.\n' +
     '상품명(name)이 없거나 실제 상품이 아닌 줄은 반드시 제외.\n' +
@@ -109,11 +109,11 @@ export default async function handler(req, res) {
 
   const items = rawItems.filter(it => it && (it.name || '').trim());
 
+  // list_price is the line total (price × quantity). Divide by qty to get per-unit buy_price.
+  const perUnit = it => Math.round((it.list_price || it.buy_price || 0) / (it.quantity || 1));
+
   if (totalPaid > 0) {
-    const totalListCost = items.reduce((s, it) => {
-      const lp = it.list_price || it.buy_price || 0;
-      return s + lp * (it.quantity || 1);
-    }, 0);
+    const totalListCost = items.reduce((s, it) => s + (it.list_price || it.buy_price || 0), 0);
 
     if (totalListCost > 0 && totalPaid < totalListCost) {
       let distributed = 0;
@@ -121,12 +121,11 @@ export default async function handler(req, res) {
       let largestCost = 0;
       items.forEach((it, i) => {
         const lp = it.list_price || it.buy_price || 0;
-        const cost = lp * (it.quantity || 1);
-        const share = Math.round(totalPaid * cost / totalListCost);
         const qty = it.quantity || 1;
+        const share = Math.round(totalPaid * lp / totalListCost);
         it.buy_price = Math.round(share / qty);
         distributed += share;
-        if (cost > largestCost) { largestCost = cost; largestIdx = i; }
+        if (lp > largestCost) { largestCost = lp; largestIdx = i; }
       });
       const diff = totalPaid - distributed;
       if (diff !== 0) {
@@ -134,10 +133,10 @@ export default async function handler(req, res) {
         it.buy_price += Math.round(diff / (it.quantity || 1));
       }
     } else {
-      items.forEach(it => { it.buy_price = it.list_price || it.buy_price || 0; });
+      items.forEach(it => { it.buy_price = perUnit(it); });
     }
   } else {
-    items.forEach(it => { it.buy_price = it.list_price || it.buy_price || 0; });
+    items.forEach(it => { it.buy_price = perUnit(it); });
   }
 
   return res.status(200).json({ items, _claudeStatus: claudeStatus });
