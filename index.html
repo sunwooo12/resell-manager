@@ -225,7 +225,7 @@ button.dfb.on{background:#1a1a1a;color:#fff;border-color:#1a1a1a;}
       <div class="modal-title">💰 판매완료 캡처 등록</div>
       <div id="sellBody" style="font-size:13px;line-height:1.6;"></div>
       <div id="sellActions" style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap;"></div>
-      <button class="cb" style="margin-top:10px;width:100%;" onclick="closeSellModal()">닫기</button>
+      <button type="button" class="cb" style="margin-top:10px;width:100%;" onclick="_handleCloseSell()">닫기</button>
     </div>
   </div>
 
@@ -235,7 +235,7 @@ button.dfb.on{background:#1a1a1a;color:#fff;border-color:#1a1a1a;}
       <div class="modal-title">🛒 주문내역 캡처 등록</div>
       <div id="orderBody" style="font-size:13px;line-height:1.6;"></div>
       <div id="orderActions" style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap;"></div>
-      <button class="cb" style="margin-top:10px;width:100%;" onclick="closeOrderModal()">닫기</button>
+      <button type="button" class="cb" style="margin-top:10px;width:100%;" onclick="_handleCloseOrder()">닫기</button>
     </div>
   </div>
 
@@ -1682,7 +1682,7 @@ function openOrderPicker(){
   if(cache&&cache.items&&cache.items.length){
     banner='<div style="background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;padding:10px 12px;margin-bottom:12px;display:flex;align-items:center;gap:10px;">'+
       '<span style="font-size:13px;flex:1;">📋 이전 분석 결과 있음 ('+cache.items.length+'건)</span>'+
-      '<button class="sb" style="padding:5px 12px;font-size:12px;background:#d97706;flex-shrink:0;" onclick="resumeOrderCache()">이어서 등록</button>'+
+      '<button type="button" class="sb" style="padding:5px 12px;font-size:12px;background:#d97706;flex-shrink:0;" onclick="resumeOrderCache()">이어서 등록</button>'+
     '</div>';
   }
   _showOrderPickerUI(banner);
@@ -1694,7 +1694,7 @@ function _orderPickerBody(){
   var thumbs=_orderPendingImages.map(function(img,i){
     return '<div style="position:relative;width:60px;height:60px;flex-shrink:0;">'+
       '<img src="'+img.dataUrl+'" style="width:60px;height:60px;object-fit:cover;border-radius:6px;border:1px solid #e2e0da;"/>'+
-      '<button onclick="removeOrderPendingImg('+i+')" style="position:absolute;top:-5px;right:-5px;width:18px;height:18px;border-radius:50%;background:#ef4444;color:#fff;border:none;cursor:pointer;font-size:11px;line-height:18px;text-align:center;padding:0;">×</button>'+
+      '<button type="button" onclick="removeOrderPendingImg('+i+')" style="position:absolute;top:-5px;right:-5px;width:18px;height:18px;border-radius:50%;background:#ef4444;color:#fff;border:none;cursor:pointer;font-size:11px;line-height:18px;text-align:center;padding:0;">×</button>'+
     '</div>';
   }).join('');
   var btnStyle=cnt===0?'width:100%;background:#9ca3af;cursor:not-allowed;margin-top:8px;':'width:100%;background:#7c3aed;margin-top:8px;';
@@ -1709,10 +1709,10 @@ function _orderPickerBody(){
     '<div style="font-size:12px;">스크린샷을 붙여넣거나 아래에서 파일/카메라 선택</div>'+
   '</div>'+
   '<div style="display:flex;gap:8px;margin-top:8px;">'+
-    '<button class="sb" style="flex:1;" onclick="document.getElementById(\'orderFile\').click()">🗂 파일 선택 (여러 장)</button>'+
-    '<button class="sb" style="flex:1;background:#4b5563;" onclick="document.getElementById(\'orderFileCam\').click()">📷 카메라</button>'+
+    '<button type="button" class="sb" style="flex:1;" onclick="document.getElementById(\'orderFile\').click()">🗂 파일 선택 (여러 장)</button>'+
+    '<button type="button" class="sb" style="flex:1;background:#4b5563;" onclick="document.getElementById(\'orderFileCam\').click()">📷 카메라</button>'+
   '</div>'+
-  '<button id="_orderAnalyzeBtn" class="sb" style="'+btnStyle+'" onclick="analyzeOrderImages()">분석하기 ('+cnt+'장)</button>';
+  '<button type="button" id="_orderAnalyzeBtn" class="sb" style="'+btnStyle+'" onclick="analyzeOrderImages()">분석하기 ('+cnt+'장)</button>';
 }
 
 function _updateOrderPickerUI(){
@@ -1724,7 +1724,7 @@ function _updateOrderPickerUI(){
   thumbEl.innerHTML=_orderPendingImages.map(function(img,i){
     return '<div style="position:relative;width:60px;height:60px;flex-shrink:0;">'+
       '<img src="'+img.dataUrl+'" style="width:60px;height:60px;object-fit:cover;border-radius:6px;border:1px solid #e2e0da;"/>'+
-      '<button onclick="removeOrderPendingImg('+i+')" style="position:absolute;top:-5px;right:-5px;width:18px;height:18px;border-radius:50%;background:#ef4444;color:#fff;border:none;cursor:pointer;font-size:11px;line-height:18px;text-align:center;padding:0;">×</button>'+
+      '<button type="button" onclick="removeOrderPendingImg('+i+')" style="position:absolute;top:-5px;right:-5px;width:18px;height:18px;border-radius:50%;background:#ef4444;color:#fff;border:none;cursor:pointer;font-size:11px;line-height:18px;text-align:center;padding:0;">×</button>'+
     '</div>';
   }).join('');
   if(cntEl)cntEl.textContent=cnt+'/5장';
@@ -1836,14 +1836,15 @@ function openSellModal(body,actions){
   document.getElementById('sellModal').style.display='flex';
 }
 function closeSellModal(){
-  var hasUnsaved=_sellRows.length>0||_sellPendingImages.length>0;
-  if(hasUnsaved){
-    if(!confirm('저장 안 됐어요. 닫을까요?'))return;
-    _saveSellCache();
-  }
   _sellPickerMode=false;
   _sellRows=[];_sellAiItems=[];_sellPendingImages=[];
   document.getElementById('sellModal').style.display='none';
+}
+function _handleCloseSell(){
+  var hasUnsaved=_sellRows.length>0||_sellPendingImages.length>0;
+  if(hasUnsaved&&!confirm('저장 안 됐어요. 닫을까요?'))return;
+  if(hasUnsaved)_saveSellCache();
+  closeSellModal();
 }
 
 function _sellPickerBody(){
@@ -1851,7 +1852,7 @@ function _sellPickerBody(){
   var thumbs=_sellPendingImages.map(function(img,i){
     return '<div style="position:relative;width:60px;height:60px;flex-shrink:0;">'+
       '<img src="'+img.dataUrl+'" style="width:60px;height:60px;object-fit:cover;border-radius:6px;border:1px solid #e2e0da;"/>'+
-      '<button onclick="removeSellPendingImg('+i+')" style="position:absolute;top:-5px;right:-5px;width:18px;height:18px;border-radius:50%;background:#ef4444;color:#fff;border:none;cursor:pointer;font-size:11px;line-height:18px;text-align:center;padding:0;">×</button>'+
+      '<button type="button" onclick="removeSellPendingImg('+i+')" style="position:absolute;top:-5px;right:-5px;width:18px;height:18px;border-radius:50%;background:#ef4444;color:#fff;border:none;cursor:pointer;font-size:11px;line-height:18px;text-align:center;padding:0;">×</button>'+
     '</div>';
   }).join('');
   var btnStyle=cnt===0?'width:100%;background:#9ca3af;cursor:not-allowed;margin-top:8px;':'width:100%;background:#16a34a;margin-top:8px;';
@@ -1866,10 +1867,10 @@ function _sellPickerBody(){
     '<div style="font-size:12px;">크림 정산 화면을 붙여넣거나 아래에서 파일/카메라 선택</div>'+
   '</div>'+
   '<div style="display:flex;gap:8px;margin-top:8px;">'+
-    '<button class="sb" style="flex:1;" onclick="document.getElementById(\'sellFile\').click()">🗂 파일 선택</button>'+
-    '<button class="sb" style="flex:1;background:#4b5563;" onclick="document.getElementById(\'sellFileCam\').click()">📷 카메라</button>'+
+    '<button type="button" class="sb" style="flex:1;" onclick="document.getElementById(\'sellFile\').click()">🗂 파일 선택</button>'+
+    '<button type="button" class="sb" style="flex:1;background:#4b5563;" onclick="document.getElementById(\'sellFileCam\').click()">📷 카메라</button>'+
   '</div>'+
-  '<button id="_sellAnalyzeBtn" class="sb" style="'+btnStyle+'" onclick="analyzeSellImages()">분석하기 ('+cnt+'장)</button>';
+  '<button type="button" id="_sellAnalyzeBtn" class="sb" style="'+btnStyle+'" onclick="analyzeSellImages()">분석하기 ('+cnt+'장)</button>';
 }
 
 function _updateSellPickerUI(){
@@ -1881,7 +1882,7 @@ function _updateSellPickerUI(){
   thumbEl.innerHTML=_sellPendingImages.map(function(img,i){
     return '<div style="position:relative;width:60px;height:60px;flex-shrink:0;">'+
       '<img src="'+img.dataUrl+'" style="width:60px;height:60px;object-fit:cover;border-radius:6px;border:1px solid #e2e0da;"/>'+
-      '<button onclick="removeSellPendingImg('+i+')" style="position:absolute;top:-5px;right:-5px;width:18px;height:18px;border-radius:50%;background:#ef4444;color:#fff;border:none;cursor:pointer;font-size:11px;line-height:18px;text-align:center;padding:0;">×</button>'+
+      '<button type="button" onclick="removeSellPendingImg('+i+')" style="position:absolute;top:-5px;right:-5px;width:18px;height:18px;border-radius:50%;background:#ef4444;color:#fff;border:none;cursor:pointer;font-size:11px;line-height:18px;text-align:center;padding:0;">×</button>'+
     '</div>';
   }).join('');
   if(cntEl)cntEl.textContent=cnt+'/5장';
@@ -2011,7 +2012,7 @@ function openSellCapture(){
   if(cache&&cache.aiItems&&cache.aiItems.length){
     banner='<div style="background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;padding:10px 12px;margin-bottom:12px;display:flex;align-items:center;gap:10px;">'+
       '<span style="font-size:13px;flex:1;">📋 이전 분석 결과 있음 ('+cache.aiItems.length+'건)</span>'+
-      '<button class="sb" style="padding:5px 12px;font-size:12px;background:#d97706;flex-shrink:0;" onclick="resumeSellCache()">이어서 등록</button>'+
+      '<button type="button" class="sb" style="padding:5px 12px;font-size:12px;background:#d97706;flex-shrink:0;" onclick="resumeSellCache()">이어서 등록</button>'+
     '</div>';
   }
   _showSellPickerUI(banner);
@@ -2078,7 +2079,7 @@ function renderSellRow(row,i){
   var iStyle='width:100%;padding:6px 8px;border:1px solid #e2e0da;border-radius:6px;font-size:13px;font-family:inherit;box-sizing:border-box;';
   var lStyle='font-size:11px;color:#888;margin-bottom:2px;';
   var today=new Date().toISOString().split('T')[0];
-  var xBtn='<button onclick="removeSellRow('+i+')" style="position:absolute;top:6px;right:8px;background:none;border:none;cursor:pointer;font-size:18px;color:#9ca3af;line-height:1;">×</button>';
+  var xBtn='<button type="button" onclick="removeSellRow('+i+')" style="position:absolute;top:6px;right:8px;background:none;border:none;cursor:pointer;font-size:18px;color:#9ca3af;line-height:1;">×</button>';
 
   // ── 새 항목 등록 모드 ─────────────────────────────────
   if(row.newItemMode){
@@ -2087,7 +2088,7 @@ function renderSellRow(row,i){
       xBtn+
       '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;padding-right:28px;">'+
         '<span style="font-size:13px;font-weight:700;color:#1d4ed8;">✨ 새 항목으로 등록</span>'+
-        '<button onclick="toggleNewItemMode('+i+')" style="padding:3px 10px;border-radius:20px;border:1px solid #93c5fd;background:none;color:#3b82f6;font-size:11px;cursor:pointer;font-family:inherit;">← 기존 항목에서 찾기</button>'+
+        '<button type="button" onclick="toggleNewItemMode('+i+')" style="padding:3px 10px;border-radius:20px;border:1px solid #93c5fd;background:none;color:#3b82f6;font-size:11px;cursor:pointer;font-family:inherit;">← 기존 항목에서 찾기</button>'+
       '</div>'+
       '<p style="font-size:11px;color:#6b7280;margin-bottom:8px;">💡 매입가를 입력하면 손익이 자동 계산돼요. 비워도 등록은 됩니다.</p>'+
       '<div style="margin-bottom:6px;">'+
@@ -2155,7 +2156,7 @@ function renderSellRow(row,i){
           return '<option value="'+a.id+'">'+_esc(scanLabel(a))+' · '+_esc(a.product_code||'')+' · '+_esc(a.buy_date||'')+'</option>';
         }).join('')+
       '</select>'+
-      '<button onclick="toggleNewItemMode('+i+')" style="width:100%;padding:8px;border-radius:8px;border:1.5px dashed #3b82f6;background:none;color:#1d4ed8;font-size:13px;font-family:inherit;cursor:pointer;font-weight:600;">+ 새 항목으로 등록</button>'+
+      '<button type="button" onclick="toggleNewItemMode('+i+')" style="width:100%;padding:8px;border-radius:8px;border:1.5px dashed #3b82f6;background:none;color:#1d4ed8;font-size:13px;font-family:inherit;cursor:pointer;font-weight:600;">+ 새 항목으로 등록</button>'+
     '</div>';
   }
 
@@ -2193,7 +2194,7 @@ function showSellPreview(){
   var rows=_sellRows.map(function(row,i){return renderSellRow(row,i);}).join('');
   openSellModal(
     '<p id="_svHdr" style="font-weight:700;margin-bottom:4px;">'+_sellRows.length+'건 — 확인 후 판매완료 처리</p>'+sub+rows,
-    '<button class="sb" style="background:#16a34a;flex:1;" onclick="confirmSellRegister()">💰 판매완료 처리</button>'
+    '<button type="button" class="sb" style="background:#16a34a;flex:1;" onclick="confirmSellRegister()">💰 판매완료 처리</button>'
   );
   setTimeout(function(){_sellRows.forEach(function(_,i){calcSellRowFee(i);});},30);
 }
@@ -2280,15 +2281,16 @@ function resumeOrderCache(){
   showOrderPreview(0,0,[]);
 }
 function closeOrderModal(){
-  var hasUnsaved=_orderItems.length>0||_orderPendingImages.length>0;
-  if(hasUnsaved){
-    if(!confirm('저장 안 됐어요. 닫을까요?'))return;
-    _saveOrderCache();
-  }
   _orderPickerMode=false;
   _orderItems=[];
   _orderPendingImages=[];
   document.getElementById('orderModal').style.display='none';
+}
+function _handleCloseOrder(){
+  var hasUnsaved=_orderItems.length>0||_orderPendingImages.length>0;
+  if(hasUnsaved&&!confirm('저장 안 됐어요. 닫을까요?'))return;
+  if(hasUnsaved)_saveOrderCache();
+  closeOrderModal();
 }
 function openOrderModal(body,actions){
   document.getElementById('orderBody').innerHTML=body;
@@ -2310,7 +2312,7 @@ function renderOrderItemRow(it,i){
   var lStyle='font-size:11px;color:#888;margin-bottom:2px;';
   var today=new Date().toISOString().split('T')[0];
   return '<div id="_or'+i+'" style="border:1px solid #e2e0da;border-radius:8px;padding:10px 12px 8px;margin-bottom:8px;background:#f8f9fa;position:relative;">'+
-    '<button onclick="removeOrderItem('+i+')" style="position:absolute;top:6px;right:8px;background:none;border:none;cursor:pointer;font-size:18px;color:#9ca3af;line-height:1;">×</button>'+
+    '<button type="button" onclick="removeOrderItem('+i+')" style="position:absolute;top:6px;right:8px;background:none;border:none;cursor:pointer;font-size:18px;color:#9ca3af;line-height:1;">×</button>'+
     '<div style="margin-bottom:6px;padding-right:24px;">'+
       '<div style="'+lStyle+'">상품명 *</div>'+
       '<input id="_oi_name_'+i+'" value="'+_esc(it.name||'')+'" style="'+iStyle+'"/>'+
@@ -2404,7 +2406,7 @@ function showOrderPreview(fileCount,dedupRemoved,errMsgs){
   var rows=_orderItems.map(function(it,i){return renderOrderItemRow(it,i);}).join('');
   openOrderModal(
     '<p id="_orHdr" style="font-weight:700;margin-bottom:4px;">'+_orderItems.length+'건 — 수정 후 전체 등록</p>'+sub+rows,
-    '<button class="sb" style="background:#7c3aed;flex:1;" onclick="confirmOrderRegister()">✅ 전체 등록 (주문완료)</button>'
+    '<button type="button" class="sb" style="background:#7c3aed;flex:1;" onclick="confirmOrderRegister()">✅ 전체 등록 (주문완료)</button>'
   );
 }
 
