@@ -2327,7 +2327,9 @@ function renderOrderItemRow(it,i){
       '<div><div style="'+lStyle+'">매입처</div><input id="_oi_source_'+i+'" value="'+_esc(it.source||'')+'" style="'+iStyle+'"/></div>'+
       '<div><div style="'+lStyle+'">매입일</div><input id="_oi_date_'+i+'" type="date" value="'+(it.buy_date||today)+'" style="'+iStyle+'"/></div>'+
     '</div>'+
-    '<div><div style="'+lStyle+'">품번</div><input id="_oi_code_'+i+'" value="'+_esc(it.product_code||'')+'" placeholder="없으면 공백" style="'+iStyle+'"/></div>'+
+    '<div style="margin-bottom:6px;"><div style="'+lStyle+'">품번</div><input id="_oi_code_'+i+'" value="'+_esc(it.product_code||'')+'" placeholder="없으면 공백" style="'+iStyle+'"/></div>'+
+    '<div style="margin-bottom:6px;"><div style="'+lStyle+'">메모</div><input id="_oi_memo_'+i+'" value="'+_esc(it.note||'')+'" placeholder="선택 입력" style="'+iStyle+'"/></div>'+
+    '<div><div style="'+lStyle+'">주문 URL</div><input id="_oi_url_'+i+'" value="'+_esc(it.order_url||'')+'" placeholder="선택 입력" style="'+iStyle+'"/></div>'+
   '</div>';
 }
 
@@ -2426,9 +2428,12 @@ async function confirmOrderRegister(){
     var source=((document.getElementById('_oi_source_'+i)||{}).value||'').trim();
     var date=((document.getElementById('_oi_date_'+i)||{}).value||today);
     var code=((document.getElementById('_oi_code_'+i)||{}).value||'').trim();
+    var memo=((document.getElementById('_oi_memo_'+i)||{}).value||'').trim();
+    var orderUrl=((document.getElementById('_oi_url_'+i)||{}).value||'').trim();
     for(var j=0;j<qty;j++){
       rows.push({name:name,brand:brand,size:size,product_code:code,source:source,
-        buy_price:price,buy_date:date,status:'주문완료',quantity:1,sold_quantity:0});
+        buy_price:price,buy_date:date,status:'주문완료',quantity:1,sold_quantity:0,
+        note:memo||undefined,order_url:orderUrl||undefined});
     }
   }
   if(!rows.length){alert('등록할 항목이 없습니다. 상품명과 매입가를 확인해주세요.');return;}
