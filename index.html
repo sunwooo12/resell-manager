@@ -2034,13 +2034,20 @@ function calcSellRowFee(i){
   var st=parseInt((document.getElementById('_sv_st_'+i)||{}).value)||0;
   var el=document.getElementById('_sv_fee_'+i);
   if(!el)return;
-  if(!sp){el.innerHTML='';return;}
-  var fee=st>0?sp-st:0;
-  var buyPrice=_sellRows[i]&&_sellRows[i].matched?(_sellRows[i].matched.buy_price||0):0;
-  var margin=st>0?st-buyPrice:0;
-  var gc=margin>=0?'#16a34a':'#dc2626';
-  el.innerHTML='수수료: '+(fee>0?fee.toLocaleString()+'원':'—')+
-    (buyPrice&&st>0?' &nbsp;·&nbsp; 마진: <b style="color:'+gc+';">'+(margin>=0?'+':'')+margin.toLocaleString()+'원</b>':'');
+  if(!sp&&!st){el.innerHTML='';return;}
+  var row=_sellRows[i];
+  var buyPrice=row&&row.matched?(row.matched.buy_price||0)
+    :(row&&row.newItemMode?parseInt((document.getElementById('_sv_bp_'+i)||{}).value)||0:0);
+  var effectiveSt=st>0?st:(sp>0?sp:0);
+  var fee=sp>0&&st>0?sp-st:0;
+  var margin=effectiveSt>0?effectiveSt-buyPrice:null;
+  var parts=[];
+  if(sp>0&&st>0)parts.push('수수료: '+(fee>0?fee.toLocaleString()+'원':'—'));
+  if(margin!==null&&buyPrice>0){
+    var gc=margin>=0?'#16a34a':'#dc2626';
+    parts.push('마진: <b style="color:'+gc+';">'+(margin>=0?'+':'')+margin.toLocaleString()+'원</b>');
+  }
+  el.innerHTML=parts.join(' &nbsp;·&nbsp; ');
 }
 
 function changeSellMatch(i){
@@ -2098,9 +2105,12 @@ function renderSellRow(row,i){
         '<div><div style="'+lStyle+'">매입일</div><input id="_sv_bd_'+i+'" type="date" value="" style="'+iStyle+'"/></div>'+
       '</div>'+
       '<div style="border-top:1px dashed #bfdbfe;padding-top:8px;margin-bottom:6px;display:grid;grid-template-columns:1fr 1fr 130px;gap:6px;">'+
-        '<div><div style="'+lStyle+'">판매가(원) *</div><input id="_sv_sp_'+i+'" type="number" min="0" value="'+(ai.sell_price||'')+'" style="'+iStyle+'" oninput="calcSellRowFee('+i+')"/></div>'+
+        '<div><div style="'+lStyle+'">판매가(원)</div><input id="_sv_sp_'+i+'" type="number" min="0" value="'+(ai.sell_price||'')+'" style="'+iStyle+'" oninput="calcSellRowFee('+i+')"/></div>'+
         '<div><div style="'+lStyle+'">정산금액(원)</div><input id="_sv_st_'+i+'" type="number" min="0" value="'+(ai.settlement_amount||'')+'" style="'+iStyle+'" oninput="calcSellRowFee('+i+')"/></div>'+
-        '<div><div style="'+lStyle+'">판매일 *</div><input id="_sv_sd_'+i+'" type="date" value="'+(ai.sell_date||today)+'" style="'+iStyle+'"/></div>'+
+        '<div><div style="'+lStyle+'">판매일</div>'+
+          '<input id="_sv_sd_'+i+'" type="date" value="'+(ai.sell_date||'')+'" style="'+iStyle+'" oninput="document.getElementById(\'_sv_sd_hint_'+i+'\').style.display=this.value?\'none\':\'block\'"/>'+
+          '<div id="_sv_sd_hint_'+i+'" style="font-size:10px;color:#9ca3af;margin-top:2px;'+(ai.sell_date?'display:none;':'')+'">정산 대기 — 날짜 직접 입력</div>'+
+        '</div>'+
       '</div>'+
       '<div id="_sv_fee_'+i+'" style="font-size:12px;color:#6b7280;min-height:16px;"></div>'+
     '</div>';
@@ -2152,12 +2162,14 @@ function renderSellRow(row,i){
   var isAlreadySold=!m&&row.alreadySold&&row.alreadySold.length>0;
   var formFields=isAlreadySold?'':
     '<div style="display:grid;grid-template-columns:1fr 1fr 130px;gap:6px;margin-bottom:6px;">'+
-      '<div><div style="'+lStyle+'">판매가(원) *</div>'+
+      '<div><div style="'+lStyle+'">판매가(원)</div>'+
         '<input id="_sv_sp_'+i+'" type="number" min="0" value="'+(row.sellPrice||'')+'" style="'+iStyle+'" oninput="calcSellRowFee('+i+')"/></div>'+
       '<div><div style="'+lStyle+'">정산금액(원)</div>'+
         '<input id="_sv_st_'+i+'" type="number" min="0" value="'+(row.settlementAmount||'')+'" style="'+iStyle+'" oninput="calcSellRowFee('+i+')"/></div>'+
       '<div><div style="'+lStyle+'">판매일</div>'+
-        '<input id="_sv_sd_'+i+'" type="date" value="'+(row.sellDate||today)+'" style="'+iStyle+'"/></div>'+
+        '<input id="_sv_sd_'+i+'" type="date" value="'+(row.sellDate||'')+'" style="'+iStyle+'" oninput="document.getElementById(\'_sv_sd_hint_'+i+'\').style.display=this.value?\'none\':\'block\'"/>'+
+        '<div id="_sv_sd_hint_'+i+'" style="font-size:10px;color:#9ca3af;margin-top:2px;'+(row.sellDate?'display:none;':'')+'">정산 대기 — 날짜 직접 입력</div>'+
+      '</div>'+
     '</div>'+
     '<div id="_sv_fee_'+i+'" style="font-size:12px;color:#6b7280;min-height:16px;"></div>';
 
@@ -2201,31 +2213,31 @@ async function confirmSellRegister(){
     if(row.newItemMode){
       var rName=((document.getElementById('_sv_name_'+i)||{}).value||'').trim();
       if(!rName){alert((i+1)+'번 항목의 상품명을 입력해주세요.');return;}
-      if(!rSp){alert((i+1)+'번 항목의 판매가를 입력해주세요.');return;}
-      if(!rSd){alert((i+1)+'번 항목의 판매일을 입력해주세요.');return;}
+      if(!rSp&&!rSt){alert((i+1)+'번 항목의 판매가 또는 정산금액을 입력해주세요.');return;}
       var rCode=((document.getElementById('_sv_code_'+i)||{}).value||'').trim();
       var rSize=((document.getElementById('_sv_size_'+i)||{}).value||'').trim();
       var rBrand=((document.getElementById('_sv_brand_'+i)||{}).value||'').trim();
       var rBp=parseInt((document.getElementById('_sv_bp_'+i)||{}).value)||0;
       var rSrc=((document.getElementById('_sv_src_'+i)||{}).value||'').trim();
       var rBd=((document.getElementById('_sv_bd_'+i)||{}).value)||null;
-      var rFee=rSt>0?rSp-rSt:0;
+      var effectiveSp=rSp||rSt;
+      var rFee=rSp>0&&rSt>0?rSp-rSt:0;
       inserts.push({name:rName,product_code:rCode,size:rSize,brand:rBrand,
         buy_price:rBp,source:rSrc,buy_date:rBd||undefined,
-        sell_price:rSp,fee:rFee,sell_date:rSd,
+        sell_price:effectiveSp,fee:rFee,sell_date:rSd||undefined,
         status:'판매완료',quantity:1,sold_quantity:1});
     }else if(row.matched){
-      if(!rSp){alert((i+1)+'번 항목의 판매가를 입력해주세요.');return;}
-      if(!rSd){alert((i+1)+'번 항목의 판매일을 입력해주세요.');return;}
+      if(!rSp&&!rSt){alert((i+1)+'번 항목의 판매가 또는 정산금액을 입력해주세요.');return;}
       var item=row.matched;
       var prevSold=item.sold_quantity||0;
       var newSold=prevSold+1;
       var totalQty=item.quantity||1;
       var newStatus=newSold>=totalQty?'판매완료':item.status;
+      var effectiveSp=rSp||rSt;
       var prevSettle=(item.sell_price||0)*prevSold-(item.fee||0);
       var totalSettle=prevSettle+(rSt||0);
-      var newFee=rSt>0?rSp*newSold-totalSettle:0;
-      updates.push({id:item.id,data:{status:newStatus,sell_price:rSp,fee:newFee,sell_date:rSd,sold_quantity:newSold}});
+      var newFee=rSp>0&&rSt>0?rSp*newSold-totalSettle:0;
+      updates.push({id:item.id,data:{status:newStatus,sell_price:effectiveSp,fee:newFee,sell_date:rSd||undefined,sold_quantity:newSold}});
     }else{
       alert((i+1)+'번 항목: 재고를 선택하거나 "+ 새 항목으로 등록"을 눌러주세요.');return;
     }

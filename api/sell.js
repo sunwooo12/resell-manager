@@ -20,7 +20,7 @@ export default async function handler(req, res) {
     '- size: 사이즈 (예: 270, US 10, XL). 없으면 "".\n' +
     '- sell_price: 판매가 개당 정수. 없으면 0.\n' +
     '- settlement_amount: 정산금액 개당 정수. 없으면 0.\n' +
-    '- sell_date: 판매일 YYYY-MM-DD. 화면에 보이면 그대로, 없으면 "".\n' +
+    '- sell_date: 판매일 YYYY-MM-DD. 화면에 보이면 그대로, 없으면 "". 정산 대기·처리 중·pending 같은 비날짜 텍스트는 빈 문자열로.\n' +
     '⚠️ 추측·임의 입력 금지. 화면에 보이는 값만. 합계·수수료 요약줄 제외.\n' +
     '여러 장이면 모두 합쳐 중복 없이 하나의 배열로.\n' +
     '설명 없이 JSON 배열만.';
