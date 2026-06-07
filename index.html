@@ -2061,13 +2061,54 @@ function removeSellRow(i){
   showSellPreview();
 }
 
+function toggleNewItemMode(i){
+  _readSellRowValues();
+  _sellRows[i].newItemMode=!_sellRows[i].newItemMode;
+  showSellPreview();
+}
+
 function renderSellRow(row,i){
   var iStyle='width:100%;padding:6px 8px;border:1px solid #e2e0da;border-radius:6px;font-size:13px;font-family:inherit;box-sizing:border-box;';
   var lStyle='font-size:11px;color:#888;margin-bottom:2px;';
   var today=new Date().toISOString().split('T')[0];
+  var xBtn='<button onclick="removeSellRow('+i+')" style="position:absolute;top:6px;right:8px;background:none;border:none;cursor:pointer;font-size:18px;color:#9ca3af;line-height:1;">×</button>';
+
+  // ── 새 항목 등록 모드 ─────────────────────────────────
+  if(row.newItemMode){
+    var ai=row.aiItem;
+    return '<div id="_sv'+i+'" style="border:1.5px solid #3b82f6;border-radius:8px;padding:10px 12px 8px;margin-bottom:10px;background:#f0f9ff;position:relative;">'+
+      xBtn+
+      '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;padding-right:28px;">'+
+        '<span style="font-size:13px;font-weight:700;color:#1d4ed8;">✨ 새 항목으로 등록</span>'+
+        '<button onclick="toggleNewItemMode('+i+')" style="padding:3px 10px;border-radius:20px;border:1px solid #93c5fd;background:none;color:#3b82f6;font-size:11px;cursor:pointer;font-family:inherit;">← 기존 항목에서 찾기</button>'+
+      '</div>'+
+      '<p style="font-size:11px;color:#6b7280;margin-bottom:8px;">💡 매입가를 입력하면 손익이 자동 계산돼요. 비워도 등록은 됩니다.</p>'+
+      '<div style="margin-bottom:6px;">'+
+        '<div style="'+lStyle+'">상품명 *</div>'+
+        '<input id="_sv_name_'+i+'" value="'+_esc(ai.name||'')+'" style="'+iStyle+'"/>'+
+      '</div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:6px;">'+
+        '<div><div style="'+lStyle+'">품번</div><input id="_sv_code_'+i+'" value="'+_esc(ai.product_code||'')+'" style="'+iStyle+'"/></div>'+
+        '<div><div style="'+lStyle+'">사이즈</div><input id="_sv_size_'+i+'" value="'+_esc(ai.size||'')+'" style="'+iStyle+'"/></div>'+
+        '<div><div style="'+lStyle+'">브랜드</div><input id="_sv_brand_'+i+'" value="" style="'+iStyle+'"/></div>'+
+      '</div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr 130px;gap:6px;margin-bottom:8px;">'+
+        '<div><div style="'+lStyle+'">매입가(원)</div><input id="_sv_bp_'+i+'" type="number" min="0" value="" style="'+iStyle+'" oninput="calcSellRowFee('+i+')"/></div>'+
+        '<div><div style="'+lStyle+'">매입처</div><input id="_sv_src_'+i+'" value="" style="'+iStyle+'"/></div>'+
+        '<div><div style="'+lStyle+'">매입일</div><input id="_sv_bd_'+i+'" type="date" value="" style="'+iStyle+'"/></div>'+
+      '</div>'+
+      '<div style="border-top:1px dashed #bfdbfe;padding-top:8px;margin-bottom:6px;display:grid;grid-template-columns:1fr 1fr 130px;gap:6px;">'+
+        '<div><div style="'+lStyle+'">판매가(원) *</div><input id="_sv_sp_'+i+'" type="number" min="0" value="'+(ai.sell_price||'')+'" style="'+iStyle+'" oninput="calcSellRowFee('+i+')"/></div>'+
+        '<div><div style="'+lStyle+'">정산금액(원)</div><input id="_sv_st_'+i+'" type="number" min="0" value="'+(ai.settlement_amount||'')+'" style="'+iStyle+'" oninput="calcSellRowFee('+i+')"/></div>'+
+        '<div><div style="'+lStyle+'">판매일 *</div><input id="_sv_sd_'+i+'" type="date" value="'+(ai.sell_date||today)+'" style="'+iStyle+'"/></div>'+
+      '</div>'+
+      '<div id="_sv_fee_'+i+'" style="font-size:12px;color:#6b7280;min-height:16px;"></div>'+
+    '</div>';
+  }
+
+  // ── 일반 모드 ─────────────────────────────────────────
   var m=row.matched;
   var alts=row.alts||[];
-
   var matchHtml;
   if(m){
     var altSel=alts.length>1
@@ -2091,20 +2132,21 @@ function renderSellRow(row,i){
       '<div style="font-size:11px;color:#9ca3af;margin-top:2px;">'+
         (sold.product_code?_esc(sold.product_code)+' · ':'')+(sold.size?_esc(sold.size)+' · ':'')+
         '판매일 '+_esc(sold.sell_date||'-')+
-      '</div>'+
-    '</div>';
+      '</div></div>';
   }else{
     var avail=items.filter(function(it){return it.status==='판매대기'||it.status==='발송완료';});
     matchHtml='<div style="background:#fef3c7;border-radius:8px;padding:8px 12px;margin-bottom:8px;">'+
-      '<div style="'+lStyle+'color:#d97706;font-weight:700;margin-bottom:3px;">⚠️ 매칭 안 됨 — 직접 선택</div>'+
-      '<div style="font-size:11px;color:#6b7280;margin-bottom:4px;">AI 인식: '+
+      '<div style="'+lStyle+'color:#d97706;font-weight:700;margin-bottom:3px;">⚠️ 매칭 안 됨 — 직접 선택 또는 새로 등록</div>'+
+      '<div style="font-size:11px;color:#6b7280;margin-bottom:6px;">AI 인식: '+
         _esc((row.aiItem.name||'')+(row.aiItem.product_code?' '+row.aiItem.product_code:'')+(row.aiItem.size?' '+row.aiItem.size:''))+'</div>'+
-      '<select id="_sv_alt_'+i+'" onchange="changeSellMatch('+i+')" style="'+iStyle+'">'+
-        '<option value="">-- 재고 항목 직접 선택 --</option>'+
+      '<select id="_sv_alt_'+i+'" onchange="changeSellMatch('+i+')" style="'+iStyle+'margin-bottom:8px;">'+
+        '<option value="">-- 기존 재고 항목 선택 --</option>'+
         avail.map(function(a){
           return '<option value="'+a.id+'">'+_esc(scanLabel(a))+' · '+_esc(a.product_code||'')+' · '+_esc(a.buy_date||'')+'</option>';
         }).join('')+
-      '</select></div>';
+      '</select>'+
+      '<button onclick="toggleNewItemMode('+i+')" style="width:100%;padding:8px;border-radius:8px;border:1.5px dashed #3b82f6;background:none;color:#1d4ed8;font-size:13px;font-family:inherit;cursor:pointer;font-weight:600;">+ 새 항목으로 등록</button>'+
+    '</div>';
   }
 
   var isAlreadySold=!m&&row.alreadySold&&row.alreadySold.length>0;
@@ -2120,7 +2162,7 @@ function renderSellRow(row,i){
     '<div id="_sv_fee_'+i+'" style="font-size:12px;color:#6b7280;min-height:16px;"></div>';
 
   return '<div id="_sv'+i+'" style="border:1px solid #e2e0da;border-radius:8px;padding:10px 12px 8px;margin-bottom:10px;background:#f8f9fa;position:relative;">'+
-    '<button onclick="removeSellRow('+i+')" style="position:absolute;top:6px;right:8px;background:none;border:none;cursor:pointer;font-size:18px;color:#9ca3af;line-height:1;">×</button>'+
+    xBtn+
     '<div style="padding-right:28px;margin-bottom:6px;font-size:13px;color:#374151;font-weight:600;">'+
       _esc(row.aiItem.name||row.aiItem.product_code||('항목 '+(i+1)))+
       (row.aiItem.size?' <span style="font-weight:400;color:#888;">'+_esc(row.aiItem.size)+'</span>':'')+
@@ -2134,7 +2176,7 @@ function showSellPreview(){
     openSellModal('<p style="color:#d97706;font-weight:700;">⚠️ 판매 항목이 없습니다.</p>','');
     return;
   }
-  var unmatched=_sellRows.filter(function(r){return !r.matched&&!(r.alreadySold&&r.alreadySold.length);}).length;
+  var unmatched=_sellRows.filter(function(r){return !r.matched&&!(r.alreadySold&&r.alreadySold.length)&&!r.newItemMode;}).length;
   var sub=unmatched?'<p style="font-size:11px;color:#dc2626;margin-bottom:8px;">⚠️ '+unmatched+'건 매칭 안 됨 — 재고 항목을 직접 선택해주세요</p>':'';
   var rows=_sellRows.map(function(row,i){return renderSellRow(row,i);}).join('');
   openSellModal(
@@ -2147,35 +2189,59 @@ function showSellPreview(){
 async function confirmSellRegister(){
   if(!sb){alert('설정 탭에서 Supabase 키를 먼저 입력해주세요.');return;}
   _readSellRowValues();
-  var updates=[];
+  var updates=[],inserts=[];
   for(var i=0;i<_sellRows.length;i++){
     if(!document.getElementById('_sv'+i))continue;
     var row=_sellRows[i];
-    if(!row.matched){alert((i+1)+'번 항목의 재고를 선택해주세요.');return;}
-    var sp=parseInt((document.getElementById('_sv_sp_'+i)||{}).value)||0;
-    var st=parseInt((document.getElementById('_sv_st_'+i)||{}).value)||0;
-    var sd=((document.getElementById('_sv_sd_'+i)||{}).value)||'';
-    if(!sp){alert((i+1)+'번 항목의 판매가를 입력해주세요.');return;}
-    if(!sd){alert((i+1)+'번 항목의 판매일을 입력해주세요.');return;}
-    var item=row.matched;
-    var prevSold=item.sold_quantity||0;
-    var newSold=prevSold+1;
-    var totalQty=item.quantity||1;
-    var newStatus=newSold>=totalQty?'판매완료':item.status;
-    var prevSettle=(item.sell_price||0)*prevSold-(item.fee||0);
-    var totalSettle=prevSettle+(st||0);
-    var newFee=st>0?sp*newSold-totalSettle:0;
-    updates.push({id:item.id,data:{status:newStatus,sell_price:sp,fee:newFee,sell_date:sd,sold_quantity:newSold}});
+    // 이미 판매완료 — 건너뜀
+    if(!row.matched&&row.alreadySold&&row.alreadySold.length)continue;
+    var rSp=parseInt((document.getElementById('_sv_sp_'+i)||{}).value)||0;
+    var rSt=parseInt((document.getElementById('_sv_st_'+i)||{}).value)||0;
+    var rSd=((document.getElementById('_sv_sd_'+i)||{}).value)||'';
+    if(row.newItemMode){
+      var rName=((document.getElementById('_sv_name_'+i)||{}).value||'').trim();
+      if(!rName){alert((i+1)+'번 항목의 상품명을 입력해주세요.');return;}
+      if(!rSp){alert((i+1)+'번 항목의 판매가를 입력해주세요.');return;}
+      if(!rSd){alert((i+1)+'번 항목의 판매일을 입력해주세요.');return;}
+      var rCode=((document.getElementById('_sv_code_'+i)||{}).value||'').trim();
+      var rSize=((document.getElementById('_sv_size_'+i)||{}).value||'').trim();
+      var rBrand=((document.getElementById('_sv_brand_'+i)||{}).value||'').trim();
+      var rBp=parseInt((document.getElementById('_sv_bp_'+i)||{}).value)||0;
+      var rSrc=((document.getElementById('_sv_src_'+i)||{}).value||'').trim();
+      var rBd=((document.getElementById('_sv_bd_'+i)||{}).value)||null;
+      var rFee=rSt>0?rSp-rSt:0;
+      inserts.push({name:rName,product_code:rCode,size:rSize,brand:rBrand,
+        buy_price:rBp,source:rSrc,buy_date:rBd||undefined,
+        sell_price:rSp,fee:rFee,sell_date:rSd,
+        status:'판매완료',quantity:1,sold_quantity:1});
+    }else if(row.matched){
+      if(!rSp){alert((i+1)+'번 항목의 판매가를 입력해주세요.');return;}
+      if(!rSd){alert((i+1)+'번 항목의 판매일을 입력해주세요.');return;}
+      var item=row.matched;
+      var prevSold=item.sold_quantity||0;
+      var newSold=prevSold+1;
+      var totalQty=item.quantity||1;
+      var newStatus=newSold>=totalQty?'판매완료':item.status;
+      var prevSettle=(item.sell_price||0)*prevSold-(item.fee||0);
+      var totalSettle=prevSettle+(rSt||0);
+      var newFee=rSt>0?rSp*newSold-totalSettle:0;
+      updates.push({id:item.id,data:{status:newStatus,sell_price:rSp,fee:newFee,sell_date:rSd,sold_quantity:newSold}});
+    }else{
+      alert((i+1)+'번 항목: 재고를 선택하거나 "+ 새 항목으로 등록"을 눌러주세요.');return;
+    }
   }
-  if(!updates.length){alert('처리할 항목이 없습니다.');return;}
+  if(!updates.length&&!inserts.length){alert('처리할 항목이 없습니다.');return;}
   try{
-    var results=await Promise.all(updates.map(function(u){return sb.from('items').update(u.data).eq('id',u.id);}));
+    var ops=updates.map(function(u){return sb.from('items').update(u.data).eq('id',u.id);});
+    if(inserts.length)ops.push(sb.from('items').insert(inserts));
+    var results=await Promise.all(ops);
     var err=results.find(function(r){return r.error;});
     if(err){alert('오류: '+err.error.message);return;}
     _clearSellCache();
     _sellRows=[];_sellAiItems=[];
     document.getElementById('sellModal').style.display='none';
-    alert(updates.length+'건을 판매완료 처리했습니다!');
+    var total=updates.length+inserts.length;
+    alert(total+'건을 판매완료 처리했습니다!'+(inserts.length?' (신규 등록 '+inserts.length+'건 포함)':''));
     load();
   }catch(e){alert('처리 오류: '+e.message);}
 }
