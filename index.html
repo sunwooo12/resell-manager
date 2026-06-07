@@ -220,7 +220,7 @@ button.dfb.on{background:#1a1a1a;color:#fff;border-color:#1a1a1a;}
   <input type="file" id="sellFileCam"    accept="image/*" capture="environment" style="display:none;" onchange="runSellScan(this)">
 
   <!-- 판매완료 캡처 모달 -->
-  <div id="sellModal" class="modal-bg" style="display:none;" onclick="if(event.target===this)closeSellModal()">
+  <div id="sellModal" class="modal-bg" style="display:none;">
     <div class="modal-box" style="width:min(580px,96vw);">
       <div class="modal-title">💰 판매완료 캡처 등록</div>
       <div id="sellBody" style="font-size:13px;line-height:1.6;"></div>
@@ -230,7 +230,7 @@ button.dfb.on{background:#1a1a1a;color:#fff;border-color:#1a1a1a;}
   </div>
 
   <!-- 주문내역 캡처 모달 -->
-  <div id="orderModal" class="modal-bg" style="display:none;" onclick="if(event.target===this)closeOrderModal()">
+  <div id="orderModal" class="modal-bg" style="display:none;">
     <div class="modal-box" style="width:min(580px,96vw);">
       <div class="modal-title">🛒 주문내역 캡처 등록</div>
       <div id="orderBody" style="font-size:13px;line-height:1.6;"></div>
