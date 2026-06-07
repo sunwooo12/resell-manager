@@ -915,7 +915,8 @@ function card(it,batchNum,totalBatches){
     var sdays=calcStorageDays(it.storage_start_date);
     var sfee=calcStorageFee(it.storage_start_date);
     metaItems+='<div><div class="ml">창고보관비</div><div class="mv '+(sfee>0?'r':'g')+'">'+
-      (sfee>0?sfee.toLocaleString()+'원':'무료')+' ('+sdays+'일 경과)</div></div>'+
+      (sfee>0?sfee.toLocaleString()+'원':'무료')+(it.status!=='판매완료'?' ('+sdays+'일 경과)':'')+
+    '</div></div>'+
       '<div><div class="ml">판매대기 시작</div><div class="mv">'+it.storage_start_date+'</div></div>';
   }
   if(it.shipping_cost>0){metaItems+='<div><div class="ml">배송비</div><div class="mv">'+(it.shipping_cost).toLocaleString()+'원</div></div>';}
@@ -929,7 +930,7 @@ function card(it,batchNum,totalBatches){
 
   // D-day 배지 — 판매대기 기준 (storage_start_date)
   var storageBadge='';
-  if(it.platform==='크림(보관)'&&it.storage_start_date&&(it.status==='판매대기'||it.status==='판매완료')){
+  if(it.platform==='크림(보관)'&&it.storage_start_date&&it.status==='판매대기'){
     var dd=30-calcStorageDays(it.storage_start_date);
     var sf=calcStorageFee(it.storage_start_date);
     if(dd>0){storageBadge='<span class="'+(dd>10?'dday-ok':'dday-warn')+'">D-'+dd+'</span>';}
@@ -1129,6 +1130,7 @@ function extractProductCodes(text){
 }
 
 function normCode(s){return (s||'').toLowerCase().replace(/[-_ /]/g,'');}
+function normSize(s){return (s||'').toLowerCase().replace(/\s/g,'').replace(/^[a-z]+(?=[0-9])/,'');}
 
 function scanLabel(it){return (it.brand?it.brand+' ':'')+it.name+(it.size?' ('+it.size+')':'');}
 function scanDetail(it){
@@ -1917,24 +1919,36 @@ async function runSellScan(input){
 
 function _showSellPickerUI(banner){openSellModal((banner||'')+_sellPickerBody(),'');}
 
+function _sellCodeSizeMatch(it,nc,ns,aiName){
+  var itc=normCode(it.product_code||'');
+  var codeMatch=nc.length>=4&&(itc.indexOf(nc)!==-1||nc.indexOf(itc)!==-1);
+  if(!codeMatch&&aiName.length>=4){
+    var itName=(it.name||'').toLowerCase().replace(/\s+/g,'');
+    codeMatch=itName.length>=4&&(itName.indexOf(aiName)!==-1||aiName.indexOf(itName)!==-1);
+  }
+  if(!codeMatch)return false;
+  if(ns&&it.size){
+    var its=normSize(it.size);
+    if(its.indexOf(ns)===-1&&ns.indexOf(its)===-1)return false;
+  }
+  return true;
+}
 function findSellCandidates(aiItem){
   var nc=normCode(aiItem.product_code||'');
-  var ns=(aiItem.size||'').toLowerCase().replace(/\s/g,'');
+  var ns=normSize(aiItem.size||'');
   var aiName=(aiItem.name||'').toLowerCase().replace(/\s+/g,'');
   return fifoSort(items.filter(function(it){
     if(it.status!=='판매대기'&&it.status!=='발송완료')return false;
-    var itc=normCode(it.product_code||'');
-    var codeMatch=nc.length>=4&&(itc.indexOf(nc)!==-1||nc.indexOf(itc)!==-1);
-    if(!codeMatch&&aiName.length>=4){
-      var itName=(it.name||'').toLowerCase().replace(/\s+/g,'');
-      codeMatch=itName.length>=4&&(itName.indexOf(aiName)!==-1||aiName.indexOf(itName)!==-1);
-    }
-    if(!codeMatch)return false;
-    if(ns&&it.size){
-      var its=(it.size||'').toLowerCase().replace(/\s/g,'');
-      if(its.indexOf(ns)===-1&&ns.indexOf(its)===-1)return false;
-    }
-    return true;
+    return _sellCodeSizeMatch(it,nc,ns,aiName);
+  }));
+}
+function findAlreadySold(aiItem){
+  var nc=normCode(aiItem.product_code||'');
+  var ns=normSize(aiItem.size||'');
+  var aiName=(aiItem.name||'').toLowerCase().replace(/\s+/g,'');
+  return fifoSort(items.filter(function(it){
+    if(it.status!=='판매완료')return false;
+    return _sellCodeSizeMatch(it,nc,ns,aiName);
   }));
 }
 
@@ -1944,7 +1958,8 @@ function _buildSellRows(){
     var alts=findSellCandidates(aiItem).filter(function(it){return usedIds.indexOf(it.id)===-1;});
     var matched=alts[0]||null;
     if(matched)usedIds.push(matched.id);
-    return{aiItem:aiItem,matched:matched,alts:alts,
+    var alreadySold=!matched?findAlreadySold(aiItem):[];
+    return{aiItem:aiItem,matched:matched,alts:alts,alreadySold:alreadySold,
       sellPrice:aiItem.sell_price||0,
       settlementAmount:aiItem.settlement_amount||0,
       sellDate:aiItem.sell_date||''};
@@ -2068,6 +2083,16 @@ function renderSellRow(row,i){
       '<div style="font-size:11px;color:#9ca3af;margin-top:2px;">'+
         (m.product_code?_esc(m.product_code)+' · ':'')+'매입 '+(m.buy_price||0).toLocaleString()+'원 · '+_esc(m.buy_date||'')+' · '+_esc(m.status)+
       '</div>'+altSel+'</div>';
+  }else if(row.alreadySold&&row.alreadySold.length){
+    var sold=row.alreadySold[0];
+    matchHtml='<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:8px 12px;margin-bottom:8px;">'+
+      '<div style="'+lStyle+'color:#2563eb;font-weight:700;margin-bottom:3px;">ℹ️ 이미 판매완료된 상품</div>'+
+      '<div style="font-weight:700;font-size:13px;">'+_esc(scanLabel(sold))+'</div>'+
+      '<div style="font-size:11px;color:#9ca3af;margin-top:2px;">'+
+        (sold.product_code?_esc(sold.product_code)+' · ':'')+(sold.size?_esc(sold.size)+' · ':'')+
+        '판매일 '+_esc(sold.sell_date||'-')+
+      '</div>'+
+    '</div>';
   }else{
     var avail=items.filter(function(it){return it.status==='판매대기'||it.status==='발송완료';});
     matchHtml='<div style="background:#fef3c7;border-radius:8px;padding:8px 12px;margin-bottom:8px;">'+
@@ -2082,13 +2107,8 @@ function renderSellRow(row,i){
       '</select></div>';
   }
 
-  return '<div id="_sv'+i+'" style="border:1px solid #e2e0da;border-radius:8px;padding:10px 12px 8px;margin-bottom:10px;background:#f8f9fa;position:relative;">'+
-    '<button onclick="removeSellRow('+i+')" style="position:absolute;top:6px;right:8px;background:none;border:none;cursor:pointer;font-size:18px;color:#9ca3af;line-height:1;">×</button>'+
-    '<div style="padding-right:28px;margin-bottom:6px;font-size:13px;color:#374151;font-weight:600;">'+
-      _esc(row.aiItem.name||row.aiItem.product_code||('항목 '+(i+1)))+
-      (row.aiItem.size?' <span style="font-weight:400;color:#888;">'+_esc(row.aiItem.size)+'</span>':'')+
-    '</div>'+
-    matchHtml+
+  var isAlreadySold=!m&&row.alreadySold&&row.alreadySold.length>0;
+  var formFields=isAlreadySold?'':
     '<div style="display:grid;grid-template-columns:1fr 1fr 130px;gap:6px;margin-bottom:6px;">'+
       '<div><div style="'+lStyle+'">판매가(원) *</div>'+
         '<input id="_sv_sp_'+i+'" type="number" min="0" value="'+(row.sellPrice||'')+'" style="'+iStyle+'" oninput="calcSellRowFee('+i+')"/></div>'+
@@ -2097,7 +2117,15 @@ function renderSellRow(row,i){
       '<div><div style="'+lStyle+'">판매일</div>'+
         '<input id="_sv_sd_'+i+'" type="date" value="'+(row.sellDate||today)+'" style="'+iStyle+'"/></div>'+
     '</div>'+
-    '<div id="_sv_fee_'+i+'" style="font-size:12px;color:#6b7280;min-height:16px;"></div>'+
+    '<div id="_sv_fee_'+i+'" style="font-size:12px;color:#6b7280;min-height:16px;"></div>';
+
+  return '<div id="_sv'+i+'" style="border:1px solid #e2e0da;border-radius:8px;padding:10px 12px 8px;margin-bottom:10px;background:#f8f9fa;position:relative;">'+
+    '<button onclick="removeSellRow('+i+')" style="position:absolute;top:6px;right:8px;background:none;border:none;cursor:pointer;font-size:18px;color:#9ca3af;line-height:1;">×</button>'+
+    '<div style="padding-right:28px;margin-bottom:6px;font-size:13px;color:#374151;font-weight:600;">'+
+      _esc(row.aiItem.name||row.aiItem.product_code||('항목 '+(i+1)))+
+      (row.aiItem.size?' <span style="font-weight:400;color:#888;">'+_esc(row.aiItem.size)+'</span>':'')+
+    '</div>'+
+    matchHtml+formFields+
   '</div>';
 }
 
@@ -2106,7 +2134,7 @@ function showSellPreview(){
     openSellModal('<p style="color:#d97706;font-weight:700;">⚠️ 판매 항목이 없습니다.</p>','');
     return;
   }
-  var unmatched=_sellRows.filter(function(r){return !r.matched;}).length;
+  var unmatched=_sellRows.filter(function(r){return !r.matched&&!(r.alreadySold&&r.alreadySold.length);}).length;
   var sub=unmatched?'<p style="font-size:11px;color:#dc2626;margin-bottom:8px;">⚠️ '+unmatched+'건 매칭 안 됨 — 재고 항목을 직접 선택해주세요</p>':'';
   var rows=_sellRows.map(function(row,i){return renderSellRow(row,i);}).join('');
   openSellModal(
