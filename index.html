@@ -126,6 +126,9 @@ button.dfb.on{background:#1a1a1a;color:#fff;border-color:#1a1a1a;}
 .modal-field input{width:100%;padding:9px 12px;border:1px solid #e2e0da;border-radius:8px;font-size:14px;font-family:'Noto Sans KR',sans-serif;}
 .paste-zone{border:2px dashed #d1d5db;border-radius:12px;padding:28px 16px;text-align:center;color:#6b7280;margin-bottom:12px;transition:border-color 0.15s,background 0.15s;}
 .paste-zone.drag-over,.paste-zone:focus-within{border-color:#7c3aed;background:#faf5ff;}
+.scanMenuItem{display:block;width:100%;padding:13px 18px;text-align:left;border:none;background:none;font-size:15px;font-family:'Noto Sans KR',sans-serif;cursor:pointer;color:#1a1a1a;border-bottom:1px solid #f0f0ec;}
+.scanMenuItem:last-child{border-bottom:none;}
+.scanMenuItem:hover,.scanMenuItem:active{background:#f5f4f0;}
 </style>
 </head>
 <body>
@@ -174,9 +177,15 @@ button.dfb.on{background:#1a1a1a;color:#fff;border-color:#1a1a1a;}
       <button class="fb" id="sortBtn" onclick="sortAsc=!sortAsc;document.getElementById('sortBtn').textContent=sortAsc?'오래된순 ↑':'최신순 ↓';render()">오래된순 ↑</button>
       <div style="margin-left:auto;display:flex;flex-direction:column;gap:6px;align-items:stretch;">
         <button class="ab" style="margin-left:0;" onclick="go(1)">+ 매입 등록</button>
-        <button class="ab" style="margin-left:0;background:#7c3aed;" onclick="openOrderPicker()">📷 주문내역 등록</button>
-        <button class="ab" style="margin-left:0;background:#0d9488;" onclick="openScanPicker()">📷 입고 스캔</button>
-        <button class="ab" style="margin-left:0;background:#d97706;" onclick="openShipScanModal()">📦 발송 스캔</button>
+        <div style="position:relative;">
+          <button class="ab" id="scanMenuBtn" style="margin-left:0;background:#7c3aed;width:100%;" onclick="toggleScanMenu()">📷 스캔 ▾</button>
+          <div id="scanMenuDrop" style="display:none;position:absolute;right:0;top:calc(100% + 4px);background:#fff;border:1px solid #e2e0da;border-radius:10px;box-shadow:0 4px 24px rgba(0,0,0,0.13);z-index:300;min-width:170px;overflow:hidden;">
+            <button class="scanMenuItem" onclick="closeScanMenu();openOrderPicker()">🛒 주문 등록</button>
+            <button class="scanMenuItem" onclick="closeScanMenu();openScanPicker()">📥 입고</button>
+            <button class="scanMenuItem" onclick="closeScanMenu();openShipScanModal()">📦 발송</button>
+            <button class="scanMenuItem" onclick="closeScanMenu();openSellCapture()">💰 판매완료</button>
+          </div>
+        </div>
       </div>
     </div>
     <div class="date-filter-bar">
@@ -207,6 +216,18 @@ button.dfb.on{background:#1a1a1a;color:#fff;border-color:#1a1a1a;}
   <input type="file" id="scanFilePicker" accept="image/*" style="display:none;" onchange="runIncomingScan(this)">
   <input type="file" id="orderFile"      accept="image/*" multiple style="display:none;" onchange="runOrderScan(this)">
   <input type="file" id="orderFileCam"   accept="image/*" capture="environment" style="display:none;" onchange="runOrderScan(this)">
+  <input type="file" id="sellFile"       accept="image/*" multiple style="display:none;" onchange="runSellScan(this)">
+  <input type="file" id="sellFileCam"    accept="image/*" capture="environment" style="display:none;" onchange="runSellScan(this)">
+
+  <!-- 판매완료 캡처 모달 -->
+  <div id="sellModal" class="modal-bg" style="display:none;" onclick="if(event.target===this)closeSellModal()">
+    <div class="modal-box" style="width:min(580px,96vw);">
+      <div class="modal-title">💰 판매완료 캡처 등록</div>
+      <div id="sellBody" style="font-size:13px;line-height:1.6;"></div>
+      <div id="sellActions" style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap;"></div>
+      <button class="cb" style="margin-top:10px;width:100%;" onclick="closeSellModal()">닫기</button>
+    </div>
+  </div>
 
   <!-- 주문내역 캡처 모달 -->
   <div id="orderModal" class="modal-bg" style="display:none;" onclick="if(event.target===this)closeOrderModal()">
@@ -1766,14 +1787,370 @@ document.addEventListener('paste',function(e){
   var orderOpen=document.getElementById('orderModal').style.display!=='none';
   var scanOpen=document.getElementById('scanModal').style.display!=='none';
   var shipOpen=document.getElementById('shipScanModal').style.display!=='none';
+  var sellOpen=document.getElementById('sellModal').style.display!=='none';
   if(orderOpen){
     if(_orderPickerMode)addOrderImages(imgs);
     else _processOrderFiles(imgs,_orderItems.length>0);
     return;
   }
+  if(sellOpen){if(_sellPickerMode)addSellImages(imgs);return;}
   if(shipOpen){_processShipScan(imgs[0]);return;}
   if(scanOpen){_runScanFiles(imgs);return;}
 });
+
+// ── 스캔 메뉴 ─────────────────────────────────────────────
+function toggleScanMenu(){
+  var d=document.getElementById('scanMenuDrop');
+  if(d)d.style.display=d.style.display==='none'?'block':'none';
+}
+function closeScanMenu(){
+  var d=document.getElementById('scanMenuDrop');
+  if(d)d.style.display='none';
+}
+document.addEventListener('click',function(e){
+  var btn=document.getElementById('scanMenuBtn');
+  var drop=document.getElementById('scanMenuDrop');
+  if(!drop||drop.style.display==='none')return;
+  if(btn&&!btn.contains(e.target)&&!drop.contains(e.target))closeScanMenu();
+});
+
+// ── 판매완료 캡처 ─────────────────────────────────────────
+var _sellAiItems=[],_sellRows=[],_sellPendingImages=[],_sellPickerMode=false;
+
+function _saveSellCache(){
+  if(!_sellAiItems.length)return;
+  try{localStorage.setItem('_sellCache',JSON.stringify({aiItems:_sellAiItems,savedAt:Date.now()}));}catch(e){}
+}
+function _loadSellCache(){
+  try{var s=localStorage.getItem('_sellCache');return s?JSON.parse(s):null;}catch(e){return null;}
+}
+function _clearSellCache(){
+  try{localStorage.removeItem('_sellCache');}catch(e){}
+}
+
+function openSellModal(body,actions){
+  document.getElementById('sellBody').innerHTML=body;
+  document.getElementById('sellActions').innerHTML=actions||'';
+  document.getElementById('sellModal').style.display='flex';
+}
+function closeSellModal(){
+  var hasUnsaved=_sellRows.length>0||_sellPendingImages.length>0;
+  if(hasUnsaved){
+    if(!confirm('저장 안 됐어요. 닫을까요?'))return;
+    _saveSellCache();
+  }
+  _sellPickerMode=false;
+  _sellRows=[];_sellAiItems=[];_sellPendingImages=[];
+  document.getElementById('sellModal').style.display='none';
+}
+
+function _sellPickerBody(){
+  var cnt=_sellPendingImages.length;
+  var thumbs=_sellPendingImages.map(function(img,i){
+    return '<div style="position:relative;width:60px;height:60px;flex-shrink:0;">'+
+      '<img src="'+img.dataUrl+'" style="width:60px;height:60px;object-fit:cover;border-radius:6px;border:1px solid #e2e0da;"/>'+
+      '<button onclick="removeSellPendingImg('+i+')" style="position:absolute;top:-5px;right:-5px;width:18px;height:18px;border-radius:50%;background:#ef4444;color:#fff;border:none;cursor:pointer;font-size:11px;line-height:18px;text-align:center;padding:0;">×</button>'+
+    '</div>';
+  }).join('');
+  var btnStyle=cnt===0?'width:100%;background:#9ca3af;cursor:not-allowed;margin-top:8px;':'width:100%;background:#16a34a;margin-top:8px;';
+  return '<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">'+
+    '<span style="font-size:13px;font-weight:600;">이미지</span>'+
+    '<span id="_sellImgCnt" style="font-size:12px;color:#6b7280;">'+cnt+'/5장</span>'+
+  '</div>'+
+  '<div id="_sellImgThumb" style="display:flex;gap:6px;flex-wrap:wrap;min-height:60px;margin-bottom:10px;">'+thumbs+'</div>'+
+  '<div class="paste-zone">'+
+    '<div style="font-size:26px;margin-bottom:5px;">📋</div>'+
+    '<div style="font-weight:700;font-size:14px;color:#374151;margin-bottom:3px;">Ctrl+V 로 붙여넣기</div>'+
+    '<div style="font-size:12px;">크림 정산 화면을 붙여넣거나 아래에서 파일/카메라 선택</div>'+
+  '</div>'+
+  '<div style="display:flex;gap:8px;margin-top:8px;">'+
+    '<button class="sb" style="flex:1;" onclick="document.getElementById(\'sellFile\').click()">🗂 파일 선택</button>'+
+    '<button class="sb" style="flex:1;background:#4b5563;" onclick="document.getElementById(\'sellFileCam\').click()">📷 카메라</button>'+
+  '</div>'+
+  '<button id="_sellAnalyzeBtn" class="sb" style="'+btnStyle+'" onclick="analyzeSellImages()">분석하기 ('+cnt+'장)</button>';
+}
+
+function _updateSellPickerUI(){
+  var cnt=_sellPendingImages.length;
+  var thumbEl=document.getElementById('_sellImgThumb');
+  var cntEl=document.getElementById('_sellImgCnt');
+  var btnEl=document.getElementById('_sellAnalyzeBtn');
+  if(!thumbEl){_showSellPickerUI();return;}
+  thumbEl.innerHTML=_sellPendingImages.map(function(img,i){
+    return '<div style="position:relative;width:60px;height:60px;flex-shrink:0;">'+
+      '<img src="'+img.dataUrl+'" style="width:60px;height:60px;object-fit:cover;border-radius:6px;border:1px solid #e2e0da;"/>'+
+      '<button onclick="removeSellPendingImg('+i+')" style="position:absolute;top:-5px;right:-5px;width:18px;height:18px;border-radius:50%;background:#ef4444;color:#fff;border:none;cursor:pointer;font-size:11px;line-height:18px;text-align:center;padding:0;">×</button>'+
+    '</div>';
+  }).join('');
+  if(cntEl)cntEl.textContent=cnt+'/5장';
+  if(btnEl){
+    btnEl.textContent='분석하기 ('+cnt+'장)';
+    btnEl.disabled=cnt===0;
+    btnEl.style.background=cnt===0?'#9ca3af':'#16a34a';
+    btnEl.style.cursor=cnt===0?'not-allowed':'pointer';
+  }
+}
+
+async function addSellImages(files){
+  var remaining=5-_sellPendingImages.length;
+  if(remaining<=0){alert('최대 5장까지 추가할 수 있습니다.');return;}
+  var toAdd=Array.from(files).slice(0,remaining);
+  if(Array.from(files).length>remaining)alert(Array.from(files).length+'장 중 '+remaining+'장만 추가됩니다. (최대 5장)');
+  for(var i=0;i<toAdd.length;i++){
+    var b64=await resizeAndEncode(toAdd[i],1500);
+    _sellPendingImages.push({b64:b64,dataUrl:'data:image/jpeg;base64,'+b64});
+  }
+  _updateSellPickerUI();
+}
+
+function removeSellPendingImg(i){
+  _sellPendingImages.splice(i,1);
+  _updateSellPickerUI();
+}
+
+async function runSellScan(input){
+  if(!input.files||!input.files.length)return;
+  var files=Array.from(input.files);
+  input.value='';
+  if(_sellPickerMode)await addSellImages(files);
+}
+
+function _showSellPickerUI(banner){openSellModal((banner||'')+_sellPickerBody(),'');}
+
+function findSellCandidates(aiItem){
+  var nc=normCode(aiItem.product_code||'');
+  var ns=(aiItem.size||'').toLowerCase().replace(/\s/g,'');
+  var aiName=(aiItem.name||'').toLowerCase().replace(/\s+/g,'');
+  return fifoSort(items.filter(function(it){
+    if(it.status!=='판매대기'&&it.status!=='발송완료')return false;
+    var itc=normCode(it.product_code||'');
+    var codeMatch=nc.length>=4&&(itc.indexOf(nc)!==-1||nc.indexOf(itc)!==-1);
+    if(!codeMatch&&aiName.length>=4){
+      var itName=(it.name||'').toLowerCase().replace(/\s+/g,'');
+      codeMatch=itName.length>=4&&(itName.indexOf(aiName)!==-1||aiName.indexOf(itName)!==-1);
+    }
+    if(!codeMatch)return false;
+    if(ns&&it.size){
+      var its=(it.size||'').toLowerCase().replace(/\s/g,'');
+      if(its.indexOf(ns)===-1&&ns.indexOf(its)===-1)return false;
+    }
+    return true;
+  }));
+}
+
+function _buildSellRows(){
+  var usedIds=[];
+  _sellRows=_sellAiItems.map(function(aiItem){
+    var alts=findSellCandidates(aiItem).filter(function(it){return usedIds.indexOf(it.id)===-1;});
+    var matched=alts[0]||null;
+    if(matched)usedIds.push(matched.id);
+    return{aiItem:aiItem,matched:matched,alts:alts,
+      sellPrice:aiItem.sell_price||0,
+      settlementAmount:aiItem.settlement_amount||0,
+      sellDate:aiItem.sell_date||''};
+  });
+}
+
+async function analyzeSellImages(){
+  if(!_sellPendingImages.length)return;
+  _sellPickerMode=false;
+  var cnt=_sellPendingImages.length;
+  openSellModal('<div style="text-align:center;color:#6b7280;padding:24px 0;">🤖 '+cnt+'장 분석 중 (Sonnet)...</div>','');
+  try{
+    var images=_sellPendingImages.map(function(img){return{data:img.b64,mediaType:'image/jpeg'};});
+    var resp=await fetch('/api/sell',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({images:images})});
+    var data=await resp.json();
+    if(data.error){
+      openSellModal('<p style="color:#dc2626;font-weight:700;">❌ 오류 '+(data._claudeStatus?data._claudeStatus+': ':'')+_esc(data.error)+'</p>','');
+      return;
+    }
+    var its=Array.isArray(data.items)?data.items.filter(function(it){return it&&(it.name||it.product_code);}):[];
+    if(!its.length){
+      openSellModal('<p style="color:#d97706;font-weight:700;">⚠️ 판매 항목을 인식하지 못했습니다.<br><span style="font-size:12px;font-weight:400;color:#6b7280;">크림 정산 내역이 잘 보이는 캡처를 올려주세요.</span></p>','');
+      return;
+    }
+    _sellAiItems=its;
+    _buildSellRows();
+    showSellPreview();
+  }catch(e){
+    openSellModal('<p style="color:#dc2626;">❌ 오류: '+_esc(e.message)+'</p>','');
+  }
+}
+
+function resumeSellCache(){
+  var cache=_loadSellCache();
+  if(!cache||!cache.aiItems||!cache.aiItems.length)return;
+  _sellAiItems=cache.aiItems;
+  _sellPickerMode=false;
+  _sellPendingImages=[];
+  _buildSellRows();
+  showSellPreview();
+}
+
+function openSellCapture(){
+  _sellRows=[];_sellAiItems=[];_sellPendingImages=[];
+  _sellPickerMode=true;
+  var cache=_loadSellCache();
+  var banner='';
+  if(cache&&cache.aiItems&&cache.aiItems.length){
+    banner='<div style="background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;padding:10px 12px;margin-bottom:12px;display:flex;align-items:center;gap:10px;">'+
+      '<span style="font-size:13px;flex:1;">📋 이전 분석 결과 있음 ('+cache.aiItems.length+'건)</span>'+
+      '<button class="sb" style="padding:5px 12px;font-size:12px;background:#d97706;flex-shrink:0;" onclick="resumeSellCache()">이어서 등록</button>'+
+    '</div>';
+  }
+  _showSellPickerUI(banner);
+}
+
+function _readSellRowValues(){
+  _sellRows.forEach(function(row,i){
+    if(!document.getElementById('_sv'+i))return;
+    var sp=parseInt((document.getElementById('_sv_sp_'+i)||{}).value)||0;
+    var st=parseInt((document.getElementById('_sv_st_'+i)||{}).value)||0;
+    var sd=((document.getElementById('_sv_sd_'+i)||{}).value)||'';
+    if(sp)row.sellPrice=sp;
+    row.settlementAmount=st;
+    if(sd)row.sellDate=sd;
+  });
+}
+
+function calcSellRowFee(i){
+  var sp=parseInt((document.getElementById('_sv_sp_'+i)||{}).value)||0;
+  var st=parseInt((document.getElementById('_sv_st_'+i)||{}).value)||0;
+  var el=document.getElementById('_sv_fee_'+i);
+  if(!el)return;
+  if(!sp){el.innerHTML='';return;}
+  var fee=st>0?sp-st:0;
+  var buyPrice=_sellRows[i]&&_sellRows[i].matched?(_sellRows[i].matched.buy_price||0):0;
+  var margin=st>0?st-buyPrice:0;
+  var gc=margin>=0?'#16a34a':'#dc2626';
+  el.innerHTML='수수료: '+(fee>0?fee.toLocaleString()+'원':'—')+
+    (buyPrice&&st>0?' &nbsp;·&nbsp; 마진: <b style="color:'+gc+';">'+(margin>=0?'+':'')+margin.toLocaleString()+'원</b>':'');
+}
+
+function changeSellMatch(i){
+  _readSellRowValues();
+  var sel=document.getElementById('_sv_alt_'+i);
+  if(!sel)return;
+  var found=sel.value?items.find(function(it){return String(it.id)===String(sel.value);}):null;
+  _sellRows[i].matched=found||null;
+  if(found&&!_sellRows[i].alts.find(function(a){return String(a.id)===String(found.id);}))
+    _sellRows[i].alts.push(found);
+  showSellPreview();
+}
+
+function removeSellRow(i){
+  _readSellRowValues();
+  _sellRows.splice(i,1);
+  _sellAiItems.splice(i,1);
+  showSellPreview();
+}
+
+function renderSellRow(row,i){
+  var iStyle='width:100%;padding:6px 8px;border:1px solid #e2e0da;border-radius:6px;font-size:13px;font-family:inherit;box-sizing:border-box;';
+  var lStyle='font-size:11px;color:#888;margin-bottom:2px;';
+  var today=new Date().toISOString().split('T')[0];
+  var m=row.matched;
+  var alts=row.alts||[];
+
+  var matchHtml;
+  if(m){
+    var altSel=alts.length>1
+      ?'<select id="_sv_alt_'+i+'" onchange="changeSellMatch('+i+')" style="'+iStyle+'margin-top:5px;">'+
+          alts.map(function(a){
+            return '<option value="'+a.id+'"'+(String(a.id)===String(m.id)?' selected':'')+'>'+
+              _esc(scanLabel(a))+' · '+_esc(a.product_code||'')+' · '+_esc(a.buy_date||'')+' · '+_esc(a.status)+'</option>';
+          }).join('')+'</select>'
+      :'';
+    matchHtml='<div style="background:#f0fdf4;border-radius:8px;padding:8px 12px;margin-bottom:8px;">'+
+      '<div style="'+lStyle+'color:#16a34a;font-weight:700;margin-bottom:3px;">✅ 매칭된 재고</div>'+
+      '<div style="font-weight:700;font-size:13px;">'+_esc(scanLabel(m))+'</div>'+
+      '<div style="font-size:11px;color:#9ca3af;margin-top:2px;">'+
+        (m.product_code?_esc(m.product_code)+' · ':'')+'매입 '+(m.buy_price||0).toLocaleString()+'원 · '+_esc(m.buy_date||'')+' · '+_esc(m.status)+
+      '</div>'+altSel+'</div>';
+  }else{
+    var avail=items.filter(function(it){return it.status==='판매대기'||it.status==='발송완료';});
+    matchHtml='<div style="background:#fef3c7;border-radius:8px;padding:8px 12px;margin-bottom:8px;">'+
+      '<div style="'+lStyle+'color:#d97706;font-weight:700;margin-bottom:3px;">⚠️ 매칭 안 됨 — 직접 선택</div>'+
+      '<div style="font-size:11px;color:#6b7280;margin-bottom:4px;">AI 인식: '+
+        _esc((row.aiItem.name||'')+(row.aiItem.product_code?' '+row.aiItem.product_code:'')+(row.aiItem.size?' '+row.aiItem.size:''))+'</div>'+
+      '<select id="_sv_alt_'+i+'" onchange="changeSellMatch('+i+')" style="'+iStyle+'">'+
+        '<option value="">-- 재고 항목 직접 선택 --</option>'+
+        avail.map(function(a){
+          return '<option value="'+a.id+'">'+_esc(scanLabel(a))+' · '+_esc(a.product_code||'')+' · '+_esc(a.buy_date||'')+'</option>';
+        }).join('')+
+      '</select></div>';
+  }
+
+  return '<div id="_sv'+i+'" style="border:1px solid #e2e0da;border-radius:8px;padding:10px 12px 8px;margin-bottom:10px;background:#f8f9fa;position:relative;">'+
+    '<button onclick="removeSellRow('+i+')" style="position:absolute;top:6px;right:8px;background:none;border:none;cursor:pointer;font-size:18px;color:#9ca3af;line-height:1;">×</button>'+
+    '<div style="padding-right:28px;margin-bottom:6px;font-size:13px;color:#374151;font-weight:600;">'+
+      _esc(row.aiItem.name||row.aiItem.product_code||('항목 '+(i+1)))+
+      (row.aiItem.size?' <span style="font-weight:400;color:#888;">'+_esc(row.aiItem.size)+'</span>':'')+
+    '</div>'+
+    matchHtml+
+    '<div style="display:grid;grid-template-columns:1fr 1fr 130px;gap:6px;margin-bottom:6px;">'+
+      '<div><div style="'+lStyle+'">판매가(원) *</div>'+
+        '<input id="_sv_sp_'+i+'" type="number" min="0" value="'+(row.sellPrice||'')+'" style="'+iStyle+'" oninput="calcSellRowFee('+i+')"/></div>'+
+      '<div><div style="'+lStyle+'">정산금액(원)</div>'+
+        '<input id="_sv_st_'+i+'" type="number" min="0" value="'+(row.settlementAmount||'')+'" style="'+iStyle+'" oninput="calcSellRowFee('+i+')"/></div>'+
+      '<div><div style="'+lStyle+'">판매일</div>'+
+        '<input id="_sv_sd_'+i+'" type="date" value="'+(row.sellDate||today)+'" style="'+iStyle+'"/></div>'+
+    '</div>'+
+    '<div id="_sv_fee_'+i+'" style="font-size:12px;color:#6b7280;min-height:16px;"></div>'+
+  '</div>';
+}
+
+function showSellPreview(){
+  if(!_sellRows.length){
+    openSellModal('<p style="color:#d97706;font-weight:700;">⚠️ 판매 항목이 없습니다.</p>','');
+    return;
+  }
+  var unmatched=_sellRows.filter(function(r){return !r.matched;}).length;
+  var sub=unmatched?'<p style="font-size:11px;color:#dc2626;margin-bottom:8px;">⚠️ '+unmatched+'건 매칭 안 됨 — 재고 항목을 직접 선택해주세요</p>':'';
+  var rows=_sellRows.map(function(row,i){return renderSellRow(row,i);}).join('');
+  openSellModal(
+    '<p id="_svHdr" style="font-weight:700;margin-bottom:4px;">'+_sellRows.length+'건 — 확인 후 판매완료 처리</p>'+sub+rows,
+    '<button class="sb" style="background:#16a34a;flex:1;" onclick="confirmSellRegister()">💰 판매완료 처리</button>'
+  );
+  setTimeout(function(){_sellRows.forEach(function(_,i){calcSellRowFee(i);});},30);
+}
+
+async function confirmSellRegister(){
+  if(!sb){alert('설정 탭에서 Supabase 키를 먼저 입력해주세요.');return;}
+  _readSellRowValues();
+  var updates=[];
+  for(var i=0;i<_sellRows.length;i++){
+    if(!document.getElementById('_sv'+i))continue;
+    var row=_sellRows[i];
+    if(!row.matched){alert((i+1)+'번 항목의 재고를 선택해주세요.');return;}
+    var sp=parseInt((document.getElementById('_sv_sp_'+i)||{}).value)||0;
+    var st=parseInt((document.getElementById('_sv_st_'+i)||{}).value)||0;
+    var sd=((document.getElementById('_sv_sd_'+i)||{}).value)||'';
+    if(!sp){alert((i+1)+'번 항목의 판매가를 입력해주세요.');return;}
+    if(!sd){alert((i+1)+'번 항목의 판매일을 입력해주세요.');return;}
+    var item=row.matched;
+    var prevSold=item.sold_quantity||0;
+    var newSold=prevSold+1;
+    var totalQty=item.quantity||1;
+    var newStatus=newSold>=totalQty?'판매완료':item.status;
+    var prevSettle=(item.sell_price||0)*prevSold-(item.fee||0);
+    var totalSettle=prevSettle+(st||0);
+    var newFee=st>0?sp*newSold-totalSettle:0;
+    updates.push({id:item.id,data:{status:newStatus,sell_price:sp,fee:newFee,sell_date:sd,sold_quantity:newSold}});
+  }
+  if(!updates.length){alert('처리할 항목이 없습니다.');return;}
+  try{
+    var results=await Promise.all(updates.map(function(u){return sb.from('items').update(u.data).eq('id',u.id);}));
+    var err=results.find(function(r){return r.error;});
+    if(err){alert('오류: '+err.error.message);return;}
+    _clearSellCache();
+    _sellRows=[];_sellAiItems=[];
+    document.getElementById('sellModal').style.display='none';
+    alert(updates.length+'건을 판매완료 처리했습니다!');
+    load();
+  }catch(e){alert('처리 오류: '+e.message);}
+}
 
 // ── 주문내역 캡처 등록 ────────────────────────────────────
 var _orderItems=[],_orderPendingImages=[],_orderPickerMode=false;
