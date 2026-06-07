@@ -19,13 +19,17 @@ export default async function handler(req, res) {
     '아래 형식의 JSON 객체만 반환:\n' +
     '{"total_paid":0,"items":[{"name":"","brand":"","size":"","product_code":"","source":"","list_price":0,"quantity":1,"buy_date":"","order_url":""}]}\n' +
     '\n' +
+    '각 필드 규칙:\n' +
     '- total_paid: 할인·쿠폰·포인트 적용 후 실제 결제금액(배송비 제외). 확인 불가면 0.\n' +
+    '- name: 상품명을 화면에 보이는 그대로 정확히 복사. 절대 요약·변형·추측 금지.\n' +
+    '- size: 옵션 텍스트에서 사이즈만 추출. 예) "화이트 블랙와펜_S" → "S", "블랙_270" → "270", "블루_XL" → "XL". 언더바(_) 뒤 또는 옵션 끝부분의 사이즈 코드. 못 찾으면 "".\n' +
+    '- quantity: 화면에 표시된 수량(예: "수량 5", "5개", "×5")을 반드시 읽어 넣을 것. 보이지 않을 때만 1.\n' +
     '- list_price: 해당 줄의 표시 금액 합계(개당 가격 × 수량, 할인 전). 확인 불가면 0.\n' +
-    '- buy_date: YYYY-MM-DD. 캡처에 날짜가 보이면 반드시 그 날짜 사용. 안 보이거나 불확실하면 빈 문자열("").\n' +
-    '⚠️ items에 넣지 말 것: 합계·총금액·배송비·쿠폰할인·포인트·주문번호·요약줄·헤더줄.\n' +
-    '상품명(name)이 없거나 실제 상품이 아닌 줄은 반드시 제외.\n' +
-    '여러 장 이미지가 있으면 모두 합쳐 중복 없이 하나의 목록으로.\n' +
-    '날짜·품번·가격은 캡처에 보이는 그대로 정확히 읽을 것. 추측·임의 입력 금지.\n' +
+    '- buy_date: YYYY-MM-DD. 화면에 날짜가 보이면 그대로, 불확실하면 "".\n' +
+    '\n' +
+    '⚠️ items에 절대 넣지 말 것: 합계·총금액·배송비·쿠폰할인·포인트·주문번호·요약줄·헤더줄.\n' +
+    '상품명(name)이 없거나 실제 상품이 아닌 줄은 제외.\n' +
+    '여러 장이면 모두 합쳐 중복 없이 하나의 목록으로.\n' +
     '설명 없이 JSON만.';
 
   // Build content: all image blocks first, then the text prompt
@@ -51,8 +55,8 @@ export default async function handler(req, res) {
         'content-type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 2000,
+        model: 'claude-sonnet-4-6',
+        max_tokens: 4000,
         messages: [{ role: 'user', content }],
       }),
     });
