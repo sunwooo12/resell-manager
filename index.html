@@ -1425,11 +1425,10 @@ async function confirmScanDirectRegister(){
   var date=((document.getElementById('_sd_date')||{}).value)||null;
   var rows=[];
   for(var j=0;j<qty;j++){
-    var row={name:name,status:'보유중',quantity:1,sold_quantity:0};
+    var row={name:name,status:'보유중',quantity:1,sold_quantity:0,buy_price:price||0};
     if(code)row.product_code=code;
     if(size)row.size=size;
     if(brand)row.brand=brand;
-    if(price)row.buy_price=price;
     if(source)row.source=source;
     if(date)row.buy_date=date;
     rows.push(row);
@@ -2290,8 +2289,8 @@ async function confirmSellRegister(){
       var effectiveSp=rSp||rSt;
       var rFee=rSp>0&&rSt>0?rSp-rSt:0;
       inserts.push({name:rName,product_code:rCode,size:rSize,brand:rBrand,
-        buy_price:rBp,source:rSrc,buy_date:rBd||undefined,
-        sell_price:effectiveSp,fee:rFee,sell_date:rSd||undefined,
+        buy_price:rBp||0,source:rSrc,buy_date:rBd||undefined,
+        sell_price:effectiveSp||0,fee:rFee||0,sell_date:rSd||undefined,
         status:'판매완료',quantity:1,sold_quantity:1});
     }else if(row.matched){
       if(!rSp&&!rSt){alert((i+1)+'번 항목의 판매가 또는 정산금액을 입력해주세요.');return;}
