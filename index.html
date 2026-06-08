@@ -1325,8 +1325,9 @@ function showOcrPicker(raw){
     'style="width:100%;padding:10px;border:1.5px solid #3b82f6;border-radius:8px;font-size:14px;font-family:monospace;box-sizing:border-box;">';
 
   openScanModal(body,
-    '<button class="sb" style="background:#0d9488;" onclick="confirmOcrCode()">이 품번으로 검색</button>'+
-    '<button class="cb" onclick="closeScanModal()">취소</button>');
+    '<button type="button" class="sb" style="background:#0d9488;flex:1;" onclick="confirmOcrCode()">이 품번으로 검색</button>'+
+    '<button type="button" class="sb" style="background:#6b7280;flex:1;" onclick="openScanDirectRegister((document.getElementById(\'_sci\')||{}).value||\'\')"  >📦 직접 등록</button>'+
+    '<button type="button" class="cb" onclick="closeScanModal()">취소</button>');
 
   // 후보 1개면 자동 선택
   if(cands.length===1){
@@ -1368,16 +1369,78 @@ function showAlreadyReceived(receivedItems,code){
 function showNoMatchResult(codes){
   var similar=findSimilarItems(codes);
   var hint=codes.length?'<div style="font-size:12px;color:#6b7280;margin-top:4px;">인식된 품번 후보: <b>'+codes.join(', ')+'</b></div>':'';
+  var safeCode=((codes&&codes[0])||'').replace(/'/g,"\\'");
+  var directBtn='<button type="button" class="sb" style="background:#0d9488;flex:1;" onclick="openScanDirectRegister(\''+safeCode+'\')">📦 직접 등록 (보유중)</button>';
   if(similar.length>0){
     var simRows=similar.map(function(it,i){return renderScanItem(it,i,false);}).join('');
     openScanModal(
       '<p style="color:#d97706;font-weight:700;">⚠️ 주문완료 정확 매칭 없음 — 유사 상품 발견</p>'+hint+
       '<p style="font-size:12px;color:#6b7280;margin:8px 0;">혹시 아래 상품 중 하나인가요?</p>'+
-      '<div>'+simRows+'</div>'+_ocrBlock(),'');
+      '<div>'+simRows+'</div>'+_ocrBlock(),
+      directBtn+'<button type="button" class="cb" onclick="closeScanModal()">취소</button>');
   }else{
     openScanModal(
-      '<p style="color:#dc2626;font-weight:700;">⚠️ 주문완료 항목 중 매칭된 상품이 없습니다</p>'+hint+_ocrBlock(),'');
+      '<p style="color:#dc2626;font-weight:700;">⚠️ 주문완료 항목 중 매칭된 상품이 없습니다</p>'+hint+_ocrBlock(),
+      directBtn+'<button type="button" class="cb" onclick="closeScanModal()">취소</button>');
   }
+}
+
+function openScanDirectRegister(code){
+  var iStyle='width:100%;padding:7px 8px;border:1px solid #e2e0da;border-radius:6px;font-size:13px;font-family:inherit;box-sizing:border-box;';
+  var lStyle='font-size:11px;color:#888;margin-bottom:2px;';
+  var body=
+    '<p style="font-weight:700;margin-bottom:10px;">📦 직접 등록 → 보유중</p>'+
+    '<div style="margin-bottom:6px;"><div style="'+lStyle+'">상품명 *</div>'+
+      '<input id="_sd_name" value="" placeholder="상품명 입력" style="'+iStyle+'"/></div>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px;">'+
+      '<div><div style="'+lStyle+'">품번</div><input id="_sd_code" value="'+_esc(code||'')+'" style="'+iStyle+'"/></div>'+
+      '<div><div style="'+lStyle+'">사이즈</div><input id="_sd_size" value="" style="'+iStyle+'"/></div>'+
+    '</div>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px;">'+
+      '<div><div style="'+lStyle+'">브랜드</div><input id="_sd_brand" value="" style="'+iStyle+'"/></div>'+
+      '<div><div style="'+lStyle+'">수량</div><input id="_sd_qty" type="number" min="1" value="1" style="'+iStyle+'"/></div>'+
+    '</div>'+
+    '<div style="border-top:1px dashed #e2e0da;margin:8px 0 6px;font-size:11px;color:#9ca3af;">매입 정보 (선택)</div>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr 130px;gap:6px;">'+
+      '<div><div style="'+lStyle+'">매입가(원)</div><input id="_sd_price" type="number" min="0" value="" placeholder="선택" style="'+iStyle+'"/></div>'+
+      '<div><div style="'+lStyle+'">매입처</div><input id="_sd_source" value="" style="'+iStyle+'"/></div>'+
+      '<div><div style="'+lStyle+'">매입일</div><input id="_sd_date" type="date" value="" style="'+iStyle+'"/></div>'+
+    '</div>';
+  openScanModal(body,
+    '<button type="button" class="sb" style="background:#0d9488;flex:1;" onclick="confirmScanDirectRegister()">📦 보유중으로 등록</button>'+
+    '<button type="button" class="cb" onclick="closeScanModal()">취소</button>');
+  setTimeout(function(){var el=document.getElementById('_sd_name');if(el)el.focus();},50);
+}
+
+async function confirmScanDirectRegister(){
+  if(!sb){alert('설정 탭에서 Supabase 키를 먼저 입력해주세요.');return;}
+  var name=((document.getElementById('_sd_name')||{}).value||'').trim();
+  if(!name){alert('상품명을 입력해주세요.');return;}
+  var code=((document.getElementById('_sd_code')||{}).value||'').trim();
+  var size=((document.getElementById('_sd_size')||{}).value||'').trim();
+  var brand=((document.getElementById('_sd_brand')||{}).value||'').trim();
+  var qty=Math.max(1,parseInt((document.getElementById('_sd_qty')||{}).value)||1);
+  var price=parseInt((document.getElementById('_sd_price')||{}).value)||0;
+  var source=((document.getElementById('_sd_source')||{}).value||'').trim();
+  var date=((document.getElementById('_sd_date')||{}).value)||null;
+  var rows=[];
+  for(var j=0;j<qty;j++){
+    var row={name:name,status:'보유중',quantity:1,sold_quantity:0};
+    if(code)row.product_code=code;
+    if(size)row.size=size;
+    if(brand)row.brand=brand;
+    if(price)row.buy_price=price;
+    if(source)row.source=source;
+    if(date)row.buy_date=date;
+    rows.push(row);
+  }
+  try{
+    var res=await sb.from('items').insert(rows);
+    if(res.error){alert('등록 실패: '+res.error.message);return;}
+    closeScanModal();
+    alert(qty+'건을 보유중으로 등록했습니다!');
+    load();
+  }catch(e){alert('등록 오류: '+e.message);}
 }
 
 function showScanResult(codes){
@@ -1492,8 +1555,9 @@ async function _runScanFiles(files){
       var errLine='<p style="color:#dc2626;font-weight:700;margin-bottom:6px;">❌ 오류 '+
         (data._claudeStatus?data._claudeStatus+': ':'')+_esc(data.error)+'</p>';
       openScanModal(errLine+_scanDebugBox(data)+_scanManualInput(),
-        '<button class="sb" style="background:#0d9488;" onclick="confirmOcrCode()">이 품번으로 검색</button>'+
-        '<button class="cb" onclick="closeScanModal()">취소</button>');
+        '<button type="button" class="sb" style="background:#0d9488;flex:1;" onclick="confirmOcrCode()">이 품번으로 검색</button>'+
+        '<button type="button" class="sb" style="background:#6b7280;flex:1;" onclick="openScanDirectRegister((document.getElementById(\'_sci\')||{}).value||\'\')"  >📦 직접 등록</button>'+
+        '<button type="button" class="cb" onclick="closeScanModal()">취소</button>');
       return;
     }
     _lastScanName=data.productName||'';
@@ -1506,15 +1570,17 @@ async function _runScanFiles(files){
     if(!codes.length){
       openScanModal('<p style="color:#d97706;font-weight:700;margin-bottom:6px;">⚠️ 품번을 인식하지 못했습니다</p>'+
         _scanDebugBox(data)+_scanManualInput(),
-        '<button class="sb" style="background:#0d9488;" onclick="confirmOcrCode()">이 품번으로 검색</button>'+
-        '<button class="cb" onclick="closeScanModal()">취소</button>');
+        '<button type="button" class="sb" style="background:#0d9488;flex:1;" onclick="confirmOcrCode()">이 품번으로 검색</button>'+
+        '<button type="button" class="sb" style="background:#6b7280;flex:1;" onclick="openScanDirectRegister((document.getElementById(\'_sci\')||{}).value||\'\')"  >📦 직접 등록</button>'+
+        '<button type="button" class="cb" onclick="closeScanModal()">취소</button>');
       return;
     }
     showScanResult(codes);
   }catch(e){
     openScanModal('<p style="color:#dc2626;">❌ AI 인식 오류: '+_esc(e.message)+'</p>'+_scanManualInput(),
-      '<button class="sb" style="background:#0d9488;" onclick="confirmOcrCode()">이 품번으로 검색</button>'+
-      '<button class="cb" onclick="closeScanModal()">취소</button>');
+      '<button type="button" class="sb" style="background:#0d9488;flex:1;" onclick="confirmOcrCode()">이 품번으로 검색</button>'+
+      '<button type="button" class="sb" style="background:#6b7280;flex:1;" onclick="openScanDirectRegister((document.getElementById(\'_sci\')||{}).value||\'\')"  >📦 직접 등록</button>'+
+      '<button type="button" class="cb" onclick="closeScanModal()">취소</button>');
   }
 }
 // ── 발송 스캔 ─────────────────────────────────────────────
