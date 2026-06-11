@@ -908,7 +908,7 @@ function card(it,batchNum,totalBatches){
     var settle=(it.sell_price||0)*sold-(it.fee||0);
     metaItems+='<div><div class="ml">판매가 (개당)</div><div class="mv">'+(it.sell_price||0).toLocaleString()+'원</div></div>'+
       '<div><div class="ml">정산금액</div><div class="mv">'+settle.toLocaleString()+'원</div></div>'+
-      '<div><div class="ml">판매일</div><div class="mv">'+(it.sell_date||'-')+'</div></div>'+
+      '<div><div class="ml">판매일</div><div class="mv"'+(it.sell_date?'':' style="color:#d97706;font-weight:700;"')+'>'+(it.sell_date||'미입력')+'</div></div>'+
       '<div><div class="ml">플랫폼</div><div class="mv">'+(it.platform||'-')+'</div></div>'+
       (hasBP?(function(){
         var profit=(it.sell_price||0)*sold-it.buy_price*sold-(it.fee||0);
@@ -946,6 +946,10 @@ function card(it,batchNum,totalBatches){
     if(dd>0){storageBadge='<span class="'+(dd>10?'dday-ok':'dday-warn')+'">D-'+dd+'</span>';}
     else{storageBadge='<span class="dday-over">D+'+(Math.abs(dd))+' '+sf.toLocaleString()+'원</span>';}
   }
+
+  var noDateBadge=(it.status==='판매완료'&&(it.sold_quantity||0)>0&&!it.sell_date)
+    ?'<span style="font-size:10px;font-weight:700;background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:999px;white-space:nowrap;">판매일 미입력</span>'
+    :'';
 
   var chevron='<span style="color:#bbb;font-size:10px;margin-left:6px;">'+(isExpanded?'▲':'▼')+'</span>';
 
@@ -1019,7 +1023,7 @@ function card(it,batchNum,totalBatches){
           [it.size,it.source,it.buy_date?'매입 '+it.buy_date:null,it.buy_price?(it.buy_price).toLocaleString()+'원':null].filter(Boolean).join(' · ')+
         '</div>'+
       '</div>'+
-      '<div class="badges">'+storageBadge+fifoBadge+(function(){
+      '<div class="badges">'+storageBadge+noDateBadge+fifoBadge+(function(){
         if(it.status!=='판매완료'||(it.sold_quantity||0)===0)return '';
         if(!(it.buy_price||0))return '<span style="font-size:11px;color:#aaa;white-space:nowrap;">매입가 미입력</span>';
         var sq=it.sold_quantity||0;
@@ -2284,6 +2288,7 @@ async function confirmSellRegister(){
   if(!sb){alert('설정 탭에서 Supabase 키를 먼저 입력해주세요.');return;}
   _readSellRowValues();
   var updates=[],inserts=[];
+  var usedItemIds=[];
   for(var i=0;i<_sellRows.length;i++){
     if(!document.getElementById('_sv'+i))continue;
     var row=_sellRows[i];
@@ -2309,6 +2314,10 @@ async function confirmSellRegister(){
         sell_price:effectiveSp||0,fee:rFee||0,sell_date:rSd||undefined,
         status:'판매완료',quantity:1,sold_quantity:1});
     }else if(row.matched){
+      if(usedItemIds.indexOf(String(row.matched.id))!==-1){
+        alert((i+1)+'번 항목: 다른 판매 건과 같은 재고가 선택됐습니다. 재고 항목을 다시 확인해주세요.');return;
+      }
+      usedItemIds.push(String(row.matched.id));
       if(!rSp&&!rSt){alert((i+1)+'번 항목의 판매가 또는 정산금액을 입력해주세요.');return;}
       var item=row.matched;
       var prevSold=item.sold_quantity||0;
