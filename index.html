@@ -654,9 +654,9 @@ async function load(){
   document.getElementById('h4').textContent=todayBuy>0?todayBuy.toLocaleString()+'원':'0원';
   syncSourceDropdown();
   render();
+  analysisData=items;
   var s4el=document.getElementById('s4');
   if(s4el&&s4el.classList.contains('on')){
-    analysisData=items;
     renderBuyCal(analysisData);
     renderMonthTable(analysisData);
   }
