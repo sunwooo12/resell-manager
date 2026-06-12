@@ -654,6 +654,12 @@ async function load(){
   document.getElementById('h4').textContent=todayBuy>0?todayBuy.toLocaleString()+'원':'0원';
   syncSourceDropdown();
   render();
+  var s4el=document.getElementById('s4');
+  if(s4el&&s4el.classList.contains('on')){
+    analysisData=items;
+    renderBuyCal(analysisData);
+    renderMonthTable(analysisData);
+  }
 }
 
 function syncSourceDropdown(){
@@ -2970,7 +2976,7 @@ function renderMonthTable(its){
     var sales=soldItems.reduce(function(s,it){return s+(it.sell_price||0)*(it.sold_quantity||0);},0);
     var profitSold=soldItems.filter(function(it){return (it.buy_price||0)>0;});
     var profit=profitSold.reduce(function(s,it){var sq=it.sold_quantity||0;return s+(it.sell_price||0)*sq-(it.buy_price||0)*sq-(it.fee||0);},0);
-    var buyCost=its.filter(function(it){return (it.buy_date||'').startsWith(mm);}).reduce(function(s,it){return s+(it.buy_price||0)*(it.quantity||1);},0);
+    var buyCost=its.filter(function(it){return (it.buy_date||'').startsWith(mm)&&it.status!=='취소/환불';}).reduce(function(s,it){return s+(it.buy_price||0)*(it.quantity||1);},0);
     var qty=soldItems.reduce(function(s,it){return s+(it.sold_quantity||0);},0);
     if(sales===0&&buyCost===0)continue;
     var pc=profit>=0?'color:#16a34a':'color:#dc2626';
@@ -2990,6 +2996,7 @@ function renderBuyCal(its){
   var dayMap={};
   its.forEach(function(it){
     if(!(it.buy_date||'').startsWith(mm))return;
+    if(it.status==='취소/환불')return;
     var day=parseInt((it.buy_date||'').substring(8))||0;
     if(!day)return;
     dayMap[day]=(dayMap[day]||0)+(it.buy_price||0)*(it.quantity||1);
