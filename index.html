@@ -35,12 +35,16 @@ button.ab{margin-left:auto;padding:8px 18px;border-radius:8px;border:none;backgr
 .fifo-dot{width:5px;height:5px;background:#16a34a;border-radius:50%;display:inline-block;}
 .list{display:flex;flex-direction:column;gap:10px;}
 .card{background:#fff;border:1px solid #e2e0da;border-radius:10px;padding:14px 16px;}
-.ctop{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:0;gap:10px;}
+.ctop{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:0;gap:10px;flex-wrap:wrap;}
 .cn{font-size:13px;font-weight:700;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .cs{font-size:11px;color:#888;margin-bottom:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .ccode{font-size:11px;color:#bbb;}
 .badges{display:flex;gap:5px;align-items:center;flex-wrap:wrap;justify-content:flex-end;}
 .badge{font-size:10px;font-weight:700;padding:2px 8px;border-radius:999px;white-space:nowrap;}
+.qa-group{display:inline-flex;gap:4px;align-items:center;flex-wrap:wrap;justify-content:flex-end;}
+button.qa-btn{padding:3px 8px;border-radius:6px;border:1px solid #e2e0da;background:#fff;font-size:11px;font-family:'Noto Sans KR',sans-serif;cursor:pointer;line-height:1.4;color:#374151;white-space:nowrap;}
+button.qa-btn.qa-primary{background:#1a1a1a;color:#fff;border-color:#1a1a1a;}
+button.qa-btn.qa-danger{color:#dc2626;border-color:#fca5a5;margin-left:2px;}
 .bY{background:#fef9c3;color:#854d0e;}
 .bB{background:#dbeafe;color:#2563eb;}
 .bP{background:#f3e8ff;color:#7c3aed;}
@@ -1116,6 +1120,26 @@ function card(it,batchNum,totalBatches){
     acts+='<button class="btnD" onclick="del(\''+it.id+'\')">삭제</button>';
   }
 
+  var qaNext='';
+  if(it.status==='주문완료'){
+    qaNext='<button class="qa-btn qa-primary" onclick="event.stopPropagation();confReceive(\''+it.id+'\')" title="입고 확인">📦 입고</button>';
+  }else if(it.status==='보유중'||it.status==='등록중'){
+    qaNext='<button class="qa-btn qa-primary" onclick="event.stopPropagation();tog(\''+('lf'+it.id)+'\')" title="발송 처리">🚚 발송</button>';
+  }else if(it.status==='발송완료'){
+    qaNext=it.platform==='크림(보관)'
+      ?'<button class="qa-btn qa-primary" onclick="event.stopPropagation();confWait(\''+it.id+'\')" title="판매대기 등록">🗂 판매대기</button>'
+      :'<button class="qa-btn qa-primary" onclick="event.stopPropagation();tog(\''+sellKey+'\')" title="판매 확정">💰 판매완료</button>';
+  }else if(it.status==='판매대기'){
+    qaNext='<button class="qa-btn qa-primary" onclick="event.stopPropagation();tog(\''+sellKey+'\')" title="판매 확정">💰 판매완료</button>';
+  }else if(it.status==='판매완료'&&remain>0){
+    qaNext='<button class="qa-btn qa-primary" onclick="event.stopPropagation();tog(\''+sellKey+'\')" title="추가 판매">💰 추가판매</button>';
+  }
+  var quickActs='<span class="qa-group">'+
+    '<button class="qa-btn" onclick="event.stopPropagation();tog(\''+ekey+'\')" title="수정">✏️</button>'+
+    qaNext+
+    '<button class="qa-btn qa-danger" onclick="event.stopPropagation();del(\''+it.id+'\')" title="삭제">🗑️</button>'+
+  '</span>';
+
   return '<div class="'+(isGrouped?'group-card':'card')+(it.status==='취소/환불'?' card-cancelled':'')+'">'+
     '<div class="ctop" onclick="toggleCard(\''+it.id+'\')" style="cursor:pointer;user-select:none;">'+
       chkBox+
@@ -1134,7 +1158,7 @@ function card(it,batchNum,totalBatches){
         var rate=cost>0?Math.round(profit/cost*100):0;
         var c=profit>=0?'#16a34a':'#dc2626';
         return '<span style="font-size:11px;font-weight:700;color:'+c+';white-space:nowrap;">'+(profit>=0?'+':'')+profit.toLocaleString()+'원 · '+(rate>=0?'+':'')+rate+'%</span>';
-      }())+'<span class="badge '+bc+'">'+it.status+'</span>'+chevron+'</div>'+
+      }())+quickActs+'<span class="badge '+bc+'">'+it.status+'</span>'+chevron+'</div>'+
     '</div>'+
     (isExpanded?
       '<div style="padding-top:2px;">'+
