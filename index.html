@@ -844,6 +844,7 @@ function render(){
   function renderGroup(k){
     var grp=groupMap[k];
     var rep=grp[0];
+    if(grp.length===1)return card(rep,1,1);
     var totalQty=grp.reduce(function(s,i){return s+(i.quantity||1);},0);
     var totalSold=grp.reduce(function(s,i){return s+(i.sold_quantity||0);},0);
     var hdrName=(rep.brand?rep.brand+' ':'')+dedupeName(rep.name,rep.brand)+(rep.size?' '+rep.size:'');
@@ -1121,7 +1122,7 @@ function card(it,batchNum,totalBatches){
       '<div style="flex:1;min-width:0;">'+
         '<div class="cn">'+titleHtml+'</div>'+
         '<div class="cs">'+
-          [it.size,it.source,it.buy_date?'매입 '+it.buy_date:null,it.buy_price?(it.buy_price).toLocaleString()+'원':null].filter(Boolean).join(' · ')+
+          [it.size,it.source,it.buy_date?'매입 '+it.buy_date:null,it.buy_price?(it.buy_price).toLocaleString()+'원':'매입가 미입력'].filter(Boolean).join(' · ')+
         '</div>'+
       '</div>'+
       '<div class="badges">'+storageBadge+noDateBadge+fifoBadge+(function(){
