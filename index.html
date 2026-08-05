@@ -28,6 +28,8 @@ main{max-width:1320px;margin:0 auto;padding:18px 20px;}
 .toolbar{display:flex;gap:8px;margin-bottom:10px;align-items:center;flex-wrap:wrap;}
 button.fb{padding:6px 14px;border-radius:999px;border:1px solid #e2e0da;background:#fff;font-size:13px;font-family:'Noto Sans KR',sans-serif;cursor:pointer;color:#888;}
 button.fb.on{background:#1a1a1a;color:#fff;border-color:#1a1a1a;}
+#filterDot{display:none;width:6px;height:6px;border-radius:50%;background:#ef4444;margin-left:5px;vertical-align:middle;}
+#filterDot.on{display:inline-block;}
 button.ab{margin-left:auto;padding:8px 18px;border-radius:8px;border:none;background:#1a1a1a;color:#fff;font-size:14px;font-family:'Noto Sans KR',sans-serif;font-weight:500;cursor:pointer;}
 .fifo-note{font-size:11px;color:#aaa;margin-bottom:12px;display:flex;align-items:center;gap:6px;}
 .fifo-dot{width:5px;height:5px;background:#16a34a;border-radius:50%;display:inline-block;}
@@ -167,14 +169,7 @@ button.dfb.on{background:#1a1a1a;color:#fff;border-color:#1a1a1a;}
       <button class="fb" onclick="filt('판매완료',this)">판매완료</button>
       <button class="fb" onclick="filt('취소/환불',this)">취소/환불</button>
       <span style="width:1px;height:18px;background:#e2e0da;display:inline-block;margin:0 2px;align-self:center;"></span>
-      <button class="fb pfb" onclick="filtPlat('크림(일반)',this)">크림(일반)</button>
-      <button class="fb pfb" onclick="filtPlat('크림(보관)',this)">크림(보관)</button>
-      <button class="fb pfb" onclick="filtPlat('포이즌',this)">포이즌</button>
-      <select class="cfsel" id="catFilter" onchange="render()">
-        <option value="all">전체 카테고리</option>
-        <option>신발</option><option>의류</option><option>잡화</option><option>액세서리</option><option>기타</option>
-      </select>
-      <button class="fb" id="sortBtn" onclick="sortAsc=!sortAsc;document.getElementById('sortBtn').textContent=sortAsc?'오래된순 ↑':'최신순 ↓';render()">오래된순 ↑</button>
+      <button class="fb" id="filterToggleBtn" onclick="toggleFilterPanel()">필터 <span id="filterToggleArrow">▾</span><span id="filterDot"></span></button>
       <div style="margin-left:auto;display:flex;flex-direction:column;gap:6px;align-items:stretch;">
         <button class="ab" style="margin-left:0;" onclick="go(1)">+ 매입 등록</button>
         <div style="position:relative;">
@@ -188,16 +183,28 @@ button.dfb.on{background:#1a1a1a;color:#fff;border-color:#1a1a1a;}
         </div>
       </div>
     </div>
-    <div class="date-filter-bar">
-      <span style="font-size:12px;color:#888;white-space:nowrap;">매입일</span>
-      <input type="date" id="dateFilterInput" onchange="setDateFilter('custom',this.value)">
-      <button class="dfb" id="dfb-today" onclick="setDateFilter('today')">오늘</button>
-      <button class="dfb" id="dfb-yesterday" onclick="setDateFilter('yesterday')">어제</button>
-      <button class="dfb" id="dfb-week" onclick="setDateFilter('week')">최근 7일</button>
-      <button class="dfb" id="dfb-month" onclick="setDateFilter('month')">이번 달</button>
-      <button class="dfb on" id="dfb-all" onclick="setDateFilter('all')">전체</button>
+    <div id="filterPanel" style="display:none;">
+      <div class="toolbar" style="margin-bottom:6px;">
+        <button class="fb pfb" onclick="filtPlat('크림(일반)',this)">크림(일반)</button>
+        <button class="fb pfb" onclick="filtPlat('크림(보관)',this)">크림(보관)</button>
+        <button class="fb pfb" onclick="filtPlat('포이즌',this)">포이즌</button>
+        <select class="cfsel" id="catFilter" onchange="render()">
+          <option value="all">전체 카테고리</option>
+          <option>신발</option><option>의류</option><option>잡화</option><option>액세서리</option><option>기타</option>
+        </select>
+        <button class="fb" id="sortBtn" onclick="sortAsc=!sortAsc;document.getElementById('sortBtn').textContent=sortAsc?'오래된순 ↑':'최신순 ↓';render()">오래된순 ↑</button>
+      </div>
+      <div class="date-filter-bar">
+        <span style="font-size:12px;color:#888;white-space:nowrap;">매입일</span>
+        <input type="date" id="dateFilterInput" onchange="setDateFilter('custom',this.value)">
+        <button class="dfb" id="dfb-today" onclick="setDateFilter('today')">오늘</button>
+        <button class="dfb" id="dfb-yesterday" onclick="setDateFilter('yesterday')">어제</button>
+        <button class="dfb" id="dfb-week" onclick="setDateFilter('week')">최근 7일</button>
+        <button class="dfb" id="dfb-month" onclick="setDateFilter('month')">이번 달</button>
+        <button class="dfb on" id="dfb-all" onclick="setDateFilter('all')">전체</button>
+      </div>
+      <div class="date-summary" id="dateFilterSummary"></div>
     </div>
-    <div class="date-summary" id="dateFilterSummary"></div>
     <div class="fifo-note"><span class="fifo-dot"></span>FIFO 정렬 — 오래된 매입 우선 표시</div>
     <div id="itemList" class="list"><div class="loading">불러오는 중...</div></div>
     <div id="bundleBarWrap"></div>
@@ -700,6 +707,17 @@ function getGroupKey(it){
   return code?'code:'+code:'name:'+(it.name||'')+'__'+(it.size||'');
 }
 
+function toggleFilterPanel(){
+  var p=document.getElementById('filterPanel');
+  var open=p.style.display!=='none';
+  p.style.display=open?'none':'block';
+  document.getElementById('filterToggleArrow').textContent=open?'▾':'▴';
+}
+function updateFilterDot(){
+  var cat=document.getElementById('catFilter').value;
+  var active=pf!=='all'||cat!=='all'||dateFilterMode!=='all';
+  document.getElementById('filterDot').classList.toggle('on',active);
+}
 function setDateFilter(mode,val){
   dateFilterMode=mode;
   dateFilterCustom=(mode==='custom'&&val)?val:'';
@@ -715,6 +733,7 @@ function setDateFilter(mode,val){
 function render(){
   var scrollY=window.scrollY;
   var cat=document.getElementById('catFilter').value;
+  updateFilterDot();
   var filtered=items.filter(function(i){
     if(cf!=='all'&&i.status!==cf)return false;
     if(cat!=='all'&&(i.category||'기타')!==cat)return false;
