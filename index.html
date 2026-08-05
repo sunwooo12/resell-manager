@@ -203,6 +203,13 @@ button.dfb.on{background:#1a1a1a;color:#fff;border-color:#1a1a1a;}
         <button class="dfb" id="dfb-month" onclick="setDateFilter('month')">이번 달</button>
         <button class="dfb on" id="dfb-all" onclick="setDateFilter('all')">전체</button>
       </div>
+      <div class="date-filter-bar">
+        <span style="font-size:12px;color:#888;white-space:nowrap;">월별</span>
+        <button class="dfb" onclick="shiftMonth(-1)">◀</button>
+        <span id="ymLabel" style="font-size:13px;font-weight:600;color:#1a1a1a;min-width:76px;text-align:center;display:inline-block;"></span>
+        <button class="dfb" onclick="shiftMonth(1)">▶</button>
+        <input type="month" id="ymInput" onchange="setYmFilter(this.value)" style="padding:5px 10px;border-radius:8px;border:1px solid #e2e0da;font-size:13px;font-family:'Noto Sans KR',sans-serif;background:#fff;color:#1a1a1a;cursor:pointer;">
+      </div>
       <div class="date-summary" id="dateFilterSummary"></div>
     </div>
     <div class="fifo-note"><span class="fifo-dot"></span>FIFO 정렬 — 오래된 매입 우선 표시</div>
@@ -419,7 +426,7 @@ ALTER TABLE items ADD COLUMN IF NOT EXISTS other_cost INT DEFAULT 0;</div>
 
 </main>
 <script>
-var sb=null,items=[],cf='all',pf='all',oid=null,expanded=new Set(),checkedItems=new Set(),searchQ='',sortAsc=true,dateFilterMode='all',dateFilterCustom='',grpExpanded=new Set();
+var sb=null,items=[],cf='all',pf='all',oid=null,expanded=new Set(),checkedItems=new Set(),searchQ='',sortAsc=true,dateFilterMode='all',dateFilterCustom='',dateFilterYm='',grpExpanded=new Set();
 var PLATFORMS=['크림(일반)','크림(보관)','포이즌','기타'];
 var tabs=['t0','t1','t2','t3','t4'],secs=['s0','s1','s2','s3','s4'];
 
@@ -723,17 +730,53 @@ function setDateFilter(mode,val){
   dateFilterCustom=(mode==='custom'&&val)?val:'';
   if(mode==='custom'&&!dateFilterCustom)dateFilterMode='all';
   if(mode!=='custom'){var inp=document.getElementById('dateFilterInput');if(inp)inp.value='';}
+  dateFilterYm='';
+  var ymInp=document.getElementById('ymInput');if(ymInp)ymInp.value='';
+  updateYmLabel();
   ['all','today','yesterday','week','month'].forEach(function(m){
     var b=document.getElementById('dfb-'+m);
     if(b)b.classList.toggle('on',m===dateFilterMode);
   });
   render();
 }
+function currentYmString(){
+  var now=new Date();
+  return now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
+}
+function updateYmLabel(){
+  var val=dateFilterYm||currentYmString();
+  var parts=val.split('-');
+  var lbl=document.getElementById('ymLabel');
+  if(lbl)lbl.textContent=parts[0]+'년 '+parseInt(parts[1],10)+'월';
+}
+function setYmFilter(val){
+  if(!val)return;
+  dateFilterMode='ym';
+  dateFilterYm=val;
+  dateFilterCustom='';
+  var inp=document.getElementById('dateFilterInput');if(inp)inp.value='';
+  var ymInp=document.getElementById('ymInput');if(ymInp)ymInp.value=val;
+  updateYmLabel();
+  ['all','today','yesterday','week','month'].forEach(function(m){
+    var b=document.getElementById('dfb-'+m);
+    if(b)b.classList.remove('on');
+  });
+  render();
+}
+function shiftMonth(delta){
+  var base=dateFilterYm||currentYmString();
+  var parts=base.split('-');
+  var y=parseInt(parts[0],10),m=parseInt(parts[1],10);
+  m+=delta;
+  if(m<1){m=12;y--;}else if(m>12){m=1;y++;}
+  setYmFilter(y+'-'+String(m).padStart(2,'0'));
+}
 
 function render(){
   var scrollY=window.scrollY;
   var cat=document.getElementById('catFilter').value;
   updateFilterDot();
+  updateYmLabel();
   var filtered=items.filter(function(i){
     if(cf!=='all'&&i.status!==cf)return false;
     if(cat!=='all'&&(i.category||'기타')!==cat)return false;
@@ -759,6 +802,7 @@ function render(){
       if(dateFilterMode==='week'&&(bd<w7||bd>td))return false;
       if(dateFilterMode==='month'&&!bd.startsWith(mm2))return false;
       if(dateFilterMode==='custom'&&bd!==dateFilterCustom)return false;
+      if(dateFilterMode==='ym'&&!bd.startsWith(dateFilterYm))return false;
     }
     return true;
   });
