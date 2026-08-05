@@ -490,6 +490,8 @@ function updateBundleBar(){
       '<input type="date" id="bulkStorageDateIn" style="'+inS+'">'+
       '<button style="background:#16a34a;color:#fff;font-weight:700;" onclick="bulkUpdateAll()">일괄 변경</button>'+
       '<button style="background:#555;color:#fff;" onclick="checkedItems.clear();render()">선택 해제</button>'+
+      '<span style="width:1px;height:20px;background:#444;display:inline-block;"></span>'+
+      '<button style="background:#dc2626;color:#fff;font-weight:700;margin-left:16px;" onclick="bulkDeleteAll()">선택 삭제</button>'+
     '</div>';
   }else{el.innerHTML='';}
 }
@@ -521,6 +523,19 @@ async function bulkUpdateAll(){
   var sy=window.scrollY;
   for(var i=0;i<ids.length;i++){
     var res=await sb.from('items').update(update).eq('id',ids[i]);
+    if(res.error){alert('오류: '+res.error.message);return;}
+  }
+  checkedItems.clear();
+  await load();
+  window.scrollTo(0,sy);
+}
+async function bulkDeleteAll(){
+  var ids=Array.from(checkedItems);
+  if(!ids.length)return;
+  if(!confirm('선택한 '+ids.length+'개를 삭제할까요?'))return;
+  var sy=window.scrollY;
+  for(var i=0;i<ids.length;i++){
+    var res=await sb.from('items').delete().eq('id',ids[i]);
     if(res.error){alert('오류: '+res.error.message);return;}
   }
   checkedItems.clear();
