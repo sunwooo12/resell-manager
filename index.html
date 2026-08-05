@@ -33,11 +33,11 @@ button.fb.on{background:#1a1a1a;color:#fff;border-color:#1a1a1a;}
 button.ab{margin-left:auto;padding:8px 18px;border-radius:8px;border:none;background:#1a1a1a;color:#fff;font-size:14px;font-family:'Noto Sans KR',sans-serif;font-weight:500;cursor:pointer;}
 .fifo-note{font-size:11px;color:#aaa;margin-bottom:12px;display:flex;align-items:center;gap:6px;}
 .fifo-dot{width:5px;height:5px;background:#16a34a;border-radius:50%;display:inline-block;}
-.list{display:flex;flex-direction:column;gap:5px;}
-.card{background:#fff;border:1px solid #e2e0da;border-radius:10px;padding:10px 14px;}
-.ctop{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:0;}
-.cn{font-size:13px;font-weight:700;margin-bottom:1px;}
-.cs{font-size:11px;color:#888;margin-bottom:1px;}
+.list{display:flex;flex-direction:column;gap:10px;}
+.card{background:#fff;border:1px solid #e2e0da;border-radius:10px;padding:14px 16px;}
+.ctop{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:0;gap:10px;}
+.cn{font-size:13px;font-weight:700;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.cs{font-size:11px;color:#888;margin-bottom:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .ccode{font-size:11px;color:#bbb;}
 .badges{display:flex;gap:5px;align-items:center;flex-wrap:wrap;justify-content:flex-end;}
 .badge{font-size:10px;font-weight:700;padding:2px 8px;border-radius:999px;white-space:nowrap;}
@@ -91,12 +91,12 @@ button.cb{padding:10px 24px;border-radius:8px;border:1px solid #e2e0da;backgroun
 .stab td{font-size:13px;padding:8px 12px;border-bottom:1px solid #f5f4f0;}
 .stab tr:last-child td{border-bottom:none;}
 select.cfsel{padding:6px 10px;border-radius:999px;border:1px solid #e2e0da;background:#fff;font-size:13px;font-family:'Noto Sans KR',sans-serif;color:#888;cursor:pointer;}
-.group-wrap{border:1px solid #d1d9e6;border-radius:10px;overflow:hidden;margin-bottom:5px;}
-.group-hdr{background:#eef2f7;padding:7px 14px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #d1d9e6;}
-.group-hdr-name{font-size:13px;font-weight:700;}
+.group-wrap{border:1px solid #d1d9e6;border-radius:10px;overflow:hidden;margin-bottom:0;}
+.group-hdr{background:#eef2f7;padding:10px 16px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #d1d9e6;}
+.group-hdr-name{font-size:13px;font-weight:700;display:flex;align-items:center;flex:1;min-width:0;}
 .group-code-badge{font-size:11px;color:#475569;background:#e2e8f0;padding:2px 8px;border-radius:999px;}
 .group-fifo-badge{font-size:11px;color:#16a34a;background:#dcfce7;padding:2px 8px;border-radius:999px;font-weight:700;}
-.group-card{background:#fff;padding:10px 14px;border-top:1px solid #f0f0ec;}
+.group-card{background:#fff;padding:14px 16px;border-top:1px solid #f0f0ec;}
 .bFifo{background:#e0f2fe;color:#0369a1;}
 .bO{background:#ffedd5;color:#9a3412;}
 .bT{background:#ccfbf1;color:#0f766e;}
@@ -846,7 +846,7 @@ function render(){
     var rep=grp[0];
     var totalQty=grp.reduce(function(s,i){return s+(i.quantity||1);},0);
     var totalSold=grp.reduce(function(s,i){return s+(i.sold_quantity||0);},0);
-    var hdrName=(rep.brand?rep.brand+' ':'')+rep.name+(rep.size?' '+rep.size:'');
+    var hdrName=(rep.brand?rep.brand+' ':'')+dedupeName(rep.name,rep.brand)+(rep.size?' '+rep.size:'');
     var grpIdStr=grp.map(function(i){return i.id;}).join(',');
     var allChecked=grp.every(function(i){return checkedItems.has(String(i.id));});
     var multi=grp.length>1;
@@ -860,7 +860,7 @@ function render(){
       '<div class="group-hdr"'+(multi?' onclick="toggleGroup(\''+safeKey+'\')" style="cursor:pointer;"':'')+'>'+
         '<input type="checkbox"'+(allChecked?' checked':'')+
           ' onclick="event.stopPropagation();toggleGroupItems(\''+grpIdStr+'\',this.checked)" style="width:16px;height:16px;cursor:pointer;flex-shrink:0;margin-right:10px;">'+
-        '<span class="group-hdr-name">'+hdrName+arrow+'</span>'+
+        '<span class="group-hdr-name"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+hdrName+'</span>'+arrow+'</span>'+
         '<div style="display:flex;align-items:center;gap:12px;font-size:12px;color:#888;">'+
           '<span style="color:#6b7280;">'+priceStr+'</span>'+
           '<span>전체 <b style="color:#374151;">'+totalQty+'</b>개</span>'+
@@ -883,6 +883,23 @@ function render(){
 }
 
 function esc(v){return (v||'').toString().replace(/&/g,'&amp;').replace(/"/g,'&quot;');}
+
+function dedupeName(name,brand){
+  name=(name||'').toString();
+  brand=(brand||'').toString().trim();
+  if(!brand)return name;
+  var trimmed=name.replace(/^\s+/,'');
+  if(trimmed.indexOf(brand)===0){
+    var rest=trimmed.slice(brand.length).replace(/^[\s\-:·]+/,'');
+    return rest||trimmed;
+  }
+  var m=trimmed.match(/^([\[\(【][^\]\)】]*[\]\)】])\s*/);
+  if(m&&m[1].indexOf(brand)>=0){
+    var rest2=trimmed.slice(m[0].length);
+    return rest2||trimmed;
+  }
+  return name;
+}
 
 function selOpts(opts,cur){
   return opts.map(function(o){return '<option'+(o===cur?' selected':'')+'>'+o+'</option>';}).join('');
@@ -982,7 +999,7 @@ function card(it,batchNum,totalBatches){
   }
 
   var brandTxt=it.brand?'<span style="color:#aaa;font-weight:400;font-size:13px;">'+it.brand+'&nbsp;</span>':'';
-  var titleHtml=brandTxt+(it.name||'')+(it.size?' <span style="color:#888;font-size:13px;">'+it.size+'</span>':'');
+  var titleHtml=brandTxt+dedupeName(it.name,it.brand);
   var codeTxt=it.product_code?'<div class="ccode">'+it.product_code+'</div>':'';
 
   var hasBP=(it.buy_price||0)>0;
@@ -1101,7 +1118,7 @@ function card(it,batchNum,totalBatches){
   return '<div class="'+(isGrouped?'group-card':'card')+(it.status==='취소/환불'?' card-cancelled':'')+'">'+
     '<div class="ctop" onclick="toggleCard(\''+it.id+'\')" style="cursor:pointer;user-select:none;">'+
       chkBox+
-      '<div style="flex:1">'+
+      '<div style="flex:1;min-width:0;">'+
         '<div class="cn">'+titleHtml+'</div>'+
         '<div class="cs">'+
           [it.size,it.source,it.buy_date?'매입 '+it.buy_date:null,it.buy_price?(it.buy_price).toLocaleString()+'원':null].filter(Boolean).join(' · ')+
