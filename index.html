@@ -124,6 +124,17 @@ button.dfb.on{background:#1a1a1a;color:#fff;border-color:#1a1a1a;}
 .search-input:focus{border-color:#1a1a1a;}
 .bundle-bar{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1a1a1a;color:#fff;padding:14px 24px;border-radius:14px;display:flex;align-items:center;gap:14px;box-shadow:0 4px 24px rgba(0,0,0,0.28);z-index:100;font-size:14px;white-space:nowrap;}
 .bundle-bar button{padding:8px 18px;border-radius:8px;border:none;font-size:13px;font-family:'Noto Sans KR',sans-serif;cursor:pointer;font-weight:700;}
+.sel-pop-wrap{position:relative;display:inline-block;}
+.sel-pop-trigger{cursor:pointer;user-select:none;display:inline-flex;align-items:center;gap:4px;padding:4px 6px;border-radius:6px;}
+.sel-pop-trigger:hover{background:rgba(255,255,255,0.12);}
+.sel-pop-trigger:after{content:'▾';font-size:9px;}
+.sel-pop{position:absolute;bottom:calc(100% + 10px);left:0;background:#fff;color:#1a1a1a;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.3);width:300px;max-height:320px;overflow-y:auto;padding:6px;z-index:110;white-space:normal;}
+.sel-pop-item{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:13px;}
+.sel-pop-item:hover{background:#f5f4f0;}
+.sel-pop-item .spi-txt{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.sel-pop-item .spi-x{flex-shrink:0;width:20px;height:20px;line-height:18px;text-align:center;border-radius:999px;border:none;background:#f0f0ec;color:#888;font-size:13px;cursor:pointer;padding:0;}
+.sel-pop-item .spi-x:hover{background:#fee2e2;color:#dc2626;}
+.sel-pop-empty{padding:10px;color:#888;font-size:13px;}
 .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:200;display:flex;align-items:center;justify-content:center;}
 .modal-box{background:#fff;border-radius:14px;padding:28px;width:340px;box-shadow:0 8px 32px rgba(0,0,0,0.2);max-height:85vh;overflow-y:auto;}
 .modal-title{font-size:16px;font-weight:700;margin-bottom:20px;}
@@ -430,7 +441,7 @@ ALTER TABLE items ADD COLUMN IF NOT EXISTS other_cost INT DEFAULT 0;</div>
 
 </main>
 <script>
-var sb=null,items=[],cf='all',pf='all',oid=null,expanded=new Set(),checkedItems=new Set(),searchQ='',sortAsc=true,dateFilterMode='all',dateFilterCustom='',dateFilterYm='',grpExpanded=new Set();
+var sb=null,items=[],cf='all',pf='all',oid=null,expanded=new Set(),checkedItems=new Set(),searchQ='',sortAsc=true,dateFilterMode='all',dateFilterCustom='',dateFilterYm='',grpExpanded=new Set(),selPopOpen=false;
 var PLATFORMS=['크림(일반)','크림(보관)','포이즌','기타'];
 var tabs=['t0','t1','t2','t3','t4'],secs=['s0','s1','s2','s3','s4'];
 
@@ -497,7 +508,10 @@ function updateBundleBar(){
     var sources=['SSG','무신사','네이버','GS SHOP','29CM','W컨셉','나이키공홈','아디다스공홈','쿠팡','롯데온','4910','에이블리','지그재그','ABC마트','오프라인','기타'];
     var inS='padding:6px 10px;border-radius:8px;border:none;font-size:13px;font-family:\'Noto Sans KR\',sans-serif;background:#333;color:#fff;cursor:pointer;';
     el.innerHTML='<div class="bundle-bar" style="flex-wrap:wrap;gap:10px;">'+
-      '<span>'+checkedItems.size+'개 선택됨</span>'+
+      '<div class="sel-pop-wrap">'+
+        '<span class="sel-pop-trigger" onclick="event.stopPropagation();toggleSelPop()">'+checkedItems.size+'개 선택됨</span>'+
+        '<div class="sel-pop" id="selPop" style="display:none;" onclick="event.stopPropagation();"></div>'+
+      '</div>'+
       '<button style="background:#3b82f6;color:#fff;" onclick="bundleShip()">묶음 발송</button>'+
       '<span style="width:1px;height:20px;background:#444;display:inline-block;"></span>'+
       '<select id="bulkStatusSel" style="'+inS+'"><option value="">상태 선택</option>'+opts.map(function(s){return '<option>'+s+'</option>';}).join('')+'</select>'+
@@ -511,8 +525,74 @@ function updateBundleBar(){
       '<span style="width:1px;height:20px;background:#444;display:inline-block;"></span>'+
       '<button style="background:#dc2626;color:#fff;font-weight:700;margin-left:16px;" onclick="bulkDeleteAll()">선택 삭제</button>'+
     '</div>';
-  }else{el.innerHTML='';}
+    syncSelPop();
+  }else{el.innerHTML='';selPopOpen=false;}
 }
+function toggleSelPop(){
+  selPopOpen=!selPopOpen;
+  syncSelPop();
+}
+function closeSelPop(){
+  if(!selPopOpen)return;
+  selPopOpen=false;
+  syncSelPop();
+}
+function syncSelPop(){
+  var pop=document.getElementById('selPop');
+  if(!pop)return;
+  if(selPopOpen&&checkedItems.size>0){
+    renderSelPopList();
+    pop.style.display='block';
+  }else{
+    pop.style.display='none';
+  }
+}
+function renderSelPopList(){
+  var pop=document.getElementById('selPop');
+  if(!pop)return;
+  var ids=Array.from(checkedItems);
+  var rows=ids.map(function(id){
+    var it=items.find(function(i){return String(i.id)===id;});
+    if(!it)return '';
+    var label=[dedupeName(it.name,it.brand),it.size,it.source].filter(Boolean).join(' · ');
+    return '<div class="sel-pop-item" onclick="scrollToItem(\''+id+'\')">'+
+      '<span class="spi-txt">'+esc(label)+'</span>'+
+      '<button class="spi-x" onclick="event.stopPropagation();removeFromSelection(\''+id+'\')" title="선택 해제">×</button>'+
+    '</div>';
+  }).join('');
+  pop.innerHTML=rows||'<div class="sel-pop-empty">선택된 항목이 없어요</div>';
+}
+function removeFromSelection(id){
+  checkedItems.delete(String(id));
+  render();
+}
+function scrollToItem(id){
+  var sid=String(id);
+  var it=items.find(function(i){return String(i.id)===sid;});
+  var doScroll=function(){
+    var elCard=document.getElementById('card-'+sid);
+    if(!elCard)return;
+    elCard.scrollIntoView({behavior:'smooth',block:'center'});
+    var origBg=elCard.style.backgroundColor;
+    elCard.style.transition='background-color 0.3s';
+    elCard.style.backgroundColor='#fff7d6';
+    setTimeout(function(){elCard.style.backgroundColor=origBg;},1000);
+  };
+  closeSelPop();
+  if(it){
+    var k=getGroupKey(it);
+    if(!grpExpanded.has(k)){
+      grpExpanded.add(k);
+      render();
+    }
+  }
+  setTimeout(doScroll,50);
+}
+document.addEventListener('click',function(e){
+  if(!selPopOpen)return;
+  if(e.target.closest('.sel-pop-wrap'))return;
+  closeSelPop();
+});
 async function bulkUpdateAll(){
   var ids=Array.from(checkedItems);
   if(!ids.length)return;
@@ -1140,7 +1220,7 @@ function card(it,batchNum,totalBatches){
     '<button class="qa-btn qa-danger" onclick="event.stopPropagation();del(\''+it.id+'\')" title="삭제">🗑️</button>'+
   '</span>';
 
-  return '<div class="'+(isGrouped?'group-card':'card')+(it.status==='취소/환불'?' card-cancelled':'')+'">'+
+  return '<div class="'+(isGrouped?'group-card':'card')+(it.status==='취소/환불'?' card-cancelled':'')+'" id="card-'+it.id+'">'+
     '<div class="ctop" onclick="toggleCard(\''+it.id+'\')" style="cursor:pointer;user-select:none;">'+
       chkBox+
       '<div style="flex:1;min-width:0;">'+
