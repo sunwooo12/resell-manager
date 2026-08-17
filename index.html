@@ -132,6 +132,7 @@ button.dfb.on{background:#1a1a1a;color:#fff;border-color:#1a1a1a;}
 .sel-pop-item{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:13px;}
 .sel-pop-item:hover{background:#f5f4f0;}
 .sel-pop-item .spi-txt{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.sel-pop-item .spi-size{flex-shrink:0;white-space:nowrap;color:#374151;font-size:12px;font-weight:700;background:#f0f0ec;padding:2px 6px;border-radius:6px;}
 .sel-pop-item .spi-x{flex-shrink:0;width:20px;height:20px;line-height:18px;text-align:center;border-radius:999px;border:none;background:#f0f0ec;color:#888;font-size:13px;cursor:pointer;padding:0;}
 .sel-pop-item .spi-x:hover{background:#fee2e2;color:#dc2626;}
 .sel-pop-empty{padding:10px;color:#888;font-size:13px;}
@@ -513,6 +514,7 @@ function updateBundleBar(){
         '<div class="sel-pop" id="selPop" style="display:none;" onclick="event.stopPropagation();"></div>'+
       '</div>'+
       '<button style="background:#3b82f6;color:#fff;" onclick="bundleShip()">묶음 발송</button>'+
+      '<button style="background:#0d9488;color:#fff;" onclick="copySelectedCodes()">품번 복사</button>'+
       '<span style="width:1px;height:20px;background:#444;display:inline-block;"></span>'+
       '<select id="bulkStatusSel" style="'+inS+'"><option value="">상태 선택</option>'+opts.map(function(s){return '<option>'+s+'</option>';}).join('')+'</select>'+
       '<input type="date" id="bulkDateIn" style="'+inS+'">'+
@@ -554,9 +556,11 @@ function renderSelPopList(){
   var rows=ids.map(function(id){
     var it=items.find(function(i){return String(i.id)===id;});
     if(!it)return '';
-    var label=[dedupeName(it.name,it.brand),it.size,it.source].filter(Boolean).join(' · ');
+    var nameTxt=[dedupeName(it.name,it.brand),it.source].filter(Boolean).join(' · ');
+    var sizeTxt=it.size||'';
     return '<div class="sel-pop-item" onclick="scrollToItem(\''+id+'\')">'+
-      '<span class="spi-txt">'+esc(label)+'</span>'+
+      '<span class="spi-txt">'+esc(nameTxt)+'</span>'+
+      (sizeTxt?'<span class="spi-size">'+esc(sizeTxt)+'</span>':'')+
       '<button class="spi-x" onclick="event.stopPropagation();removeFromSelection(\''+id+'\')" title="선택 해제">×</button>'+
     '</div>';
   }).join('');
@@ -639,6 +643,45 @@ async function bulkDeleteAll(){
   checkedItems.clear();
   await load();
   window.scrollTo(0,sy);
+}
+function copySelectedCodes(){
+  var ids=Array.from(checkedItems);
+  if(!ids.length)return;
+  var seen=new Set(),codes=[];
+  ids.forEach(function(id){
+    var it=items.find(function(i){return String(i.id)===id;});
+    var code=it&&it.product_code?String(it.product_code).trim():'';
+    if(code&&!seen.has(code)){seen.add(code);codes.push(code);}
+  });
+  if(!codes.length){alert('선택한 항목에 품번이 없습니다.');return;}
+  var text=codes.join('\n');
+  var done=function(){showSimpleToast(codes.length+'개 품번 복사됨');};
+  var fail=function(){alert('복사에 실패했습니다.');};
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(done).catch(function(){_fallbackCopyText(text,done,fail);});
+  }else{
+    _fallbackCopyText(text,done,fail);
+  }
+}
+function _fallbackCopyText(text,done,fail){
+  try{
+    var ta=document.createElement('textarea');
+    ta.value=text;ta.style.position='fixed';ta.style.opacity='0';
+    document.body.appendChild(ta);ta.focus();ta.select();
+    var ok=document.execCommand('copy');
+    document.body.removeChild(ta);
+    if(ok)done();else fail();
+  }catch(e){fail();}
+}
+function showSimpleToast(msg){
+  var old=document.getElementById('simpleToast');if(old)old.remove();
+  var t=document.createElement('div');
+  t.id='simpleToast';
+  t.style='position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#1a1a1a;color:#fff;'+
+    'padding:10px 18px;border-radius:12px;z-index:300;font-size:13px;box-shadow:0 4px 20px rgba(0,0,0,0.35);white-space:nowrap;';
+  t.textContent=msg;
+  document.body.appendChild(t);
+  setTimeout(function(){var el=document.getElementById('simpleToast');if(el)el.remove();},1800);
 }
 function bundleShip(){
   if(!checkedItems.size){return;}
