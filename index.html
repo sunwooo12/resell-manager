@@ -1177,7 +1177,7 @@ function card(it,batchNum,totalBatches){
   }
 
   var noDateBadge=(it.status==='판매완료'&&(it.sold_quantity||0)>0&&!it.sell_date)
-    ?'<span style="font-size:10px;font-weight:700;background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:999px;white-space:nowrap;">판매일 미입력</span>'
+    ?'<span onclick="event.stopPropagation();if(confirm(\'판매일을 오늘 날짜로 채울까요? (수익 집계에 반영됩니다)\'))quickFillSellDate(\''+it.id+'\');" title="클릭하면 오늘 날짜로 채워져 수익 집계에 반영돼요" style="cursor:pointer;font-size:10px;font-weight:700;background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:999px;white-space:nowrap;">⚠ 판매일 입력 필요</span>'
     :'';
 
   var chevron='<span style="color:#bbb;font-size:10px;margin-left:6px;">'+(isExpanded?'▲':'▼')+'</span>';
@@ -2449,7 +2449,7 @@ function renderSellRow(row,i){
         '<div><div style="'+lStyle+'">정산금액(원)</div><input id="_sv_st_'+i+'" type="number" min="0" value="'+(ai.settlement_amount||'')+'" style="'+iStyle+'" oninput="calcSellRowFee('+i+')"/></div>'+
         '<div><div style="'+lStyle+'">판매일</div>'+
           '<input id="_sv_sd_'+i+'" type="date" value="'+(ai.sell_date||'')+'" style="'+iStyle+'" oninput="document.getElementById(\'_sv_sd_hint_'+i+'\').style.display=this.value?\'none\':\'block\'"/>'+
-          '<div id="_sv_sd_hint_'+i+'" style="font-size:10px;color:#9ca3af;margin-top:2px;'+(ai.sell_date?'display:none;':'')+'">정산 대기 — 날짜 직접 입력</div>'+
+          '<div id="_sv_sd_hint_'+i+'" style="font-size:10px;color:#9ca3af;margin-top:2px;'+(ai.sell_date?'display:none;':'')+'">비워두면 오늘 날짜로 저장돼요</div>'+
         '</div>'+
       '</div>'+
       '<div id="_sv_fee_'+i+'" style="font-size:12px;color:#6b7280;min-height:16px;"></div>'+
@@ -2544,6 +2544,7 @@ function showSellPreview(){
 async function confirmSellRegister(){
   if(!sb){alert('설정 탭에서 Supabase 키를 먼저 입력해주세요.');return;}
   _readSellRowValues();
+  var today=new Date().toISOString().split('T')[0];
   var updates=[],inserts=[];
   var usedItemIds=[];
   for(var i=0;i<_sellRows.length;i++){
@@ -2553,7 +2554,7 @@ async function confirmSellRegister(){
     if(!row.matched&&row.alreadySold&&row.alreadySold.length)continue;
     var rSp=parseInt((document.getElementById('_sv_sp_'+i)||{}).value)||0;
     var rSt=parseInt((document.getElementById('_sv_st_'+i)||{}).value)||0;
-    var rSd=((document.getElementById('_sv_sd_'+i)||{}).value)||'';
+    var rSd=((document.getElementById('_sv_sd_'+i)||{}).value)||today;
     if(row.newItemMode){
       var rName=((document.getElementById('_sv_name_'+i)||{}).value||'').trim();
       if(!rName){alert((i+1)+'번 항목의 상품명을 입력해주세요.');return;}
@@ -2857,6 +2858,13 @@ async function confCancel(id){
   load();
 }
 
+async function quickFillSellDate(id){
+  var today=new Date().toISOString().split('T')[0];
+  var res=await sb.from('items').update({sell_date:today}).eq('id',id);
+  if(res.error){alert('오류: '+res.error.message);return;}
+  load();
+}
+
 
 function computeFee(sellPrice,soldQty,settleTotal){
   return settleTotal>0?sellPrice*soldQty-settleTotal:0;
@@ -2866,8 +2874,8 @@ async function confSell(id,maxRemain){
   var sellQty=parseInt(document.getElementById('sq'+id).value)||maxRemain;
   var sp=parseInt(document.getElementById('sp'+id).value);
   var st=parseInt(document.getElementById('st'+id).value)||0;
-  var sd=document.getElementById('sd'+id).value;
-  if(!sp||!sd){alert('판매가와 판매일을 입력해주세요.');return;}
+  var sd=document.getElementById('sd'+id).value||new Date().toISOString().split('T')[0];
+  if(!sp){alert('판매가를 입력해주세요.');return;}
   if(sellQty<1||sellQty>maxRemain){alert('판매 수량을 확인해주세요.');return;}
 
   var item=items.find(function(i){return i.id==id;});
@@ -3004,6 +3012,11 @@ async function updateItem(id){
     updateData.sell_date=null;
     updateData.fee=0;
     updateData.sold_quantity=0;
+  }
+  // 판매완료인데 판매일이 비어 있으면(신규 입력도, 기존 값도 없음) 오늘 날짜로 자동 채움 → 수익 집계 누락 방지
+  var finalStatus=updateData.status||(item?item.status:null);
+  if(finalStatus==='판매완료'&&updateData.sell_date===undefined&&!(item&&item.sell_date)){
+    updateData.sell_date=new Date().toISOString().split('T')[0];
   }
   var res=await sb.from('items').update(updateData).eq('id',id);
   if(res.error){alert('오류: '+res.error.message);return;}
