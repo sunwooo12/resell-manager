@@ -286,13 +286,14 @@ button.dfb.on{background:#1a1a1a;color:#fff;border-color:#1a1a1a;}
 
   <!-- 발송 스캔 모달 -->
   <div id="shipScanModal" class="modal-bg" style="display:none;" onclick="if(event.target===this)closeShipScanModal()">
-    <div class="modal-box" style="width:min(480px,96vw);">
+    <div class="modal-box" style="width:min(560px,96vw);">
       <div class="modal-title">📦 발송 스캔</div>
       <div id="shipScanBody" style="font-size:13px;line-height:1.6;"></div>
       <button class="cb" style="margin-top:10px;width:100%;" onclick="closeShipScanModal()">닫기</button>
     </div>
   </div>
   <input type="file" id="shipScanFile" accept="image/*" capture="environment" style="display:none;" onchange="runShipScan(this)">
+  <input type="file" id="shipListFile" accept="image/*" multiple style="display:none;" onchange="runShipListScan(this)">
 
   <!-- 묶음발송 모달 -->
   <div id="bundleModal" class="modal-bg" style="display:none;" onclick="if(event.target===this)closeBundleModal()">
@@ -1899,6 +1900,8 @@ async function _runScanFiles(files){
 }
 // ── 발송 스캔 ─────────────────────────────────────────────
 var _shipBox=[];
+var _shipMode='single';
+var _shipListPendingImages=[],_shipListPickerMode=false,_shipListRows=[];
 
 function findHeldForDispatch(codes){
   var ncs=codes.map(normCode);
@@ -1925,7 +1928,21 @@ function _shipManualInput(){
   '</div>';
 }
 
+function _shipModeSwitchHtml(){
+  return '<div style="display:flex;gap:6px;margin-bottom:12px;">'+
+    '<button type="button" class="fb'+(_shipMode==='single'?' on':'')+'" style="flex:1;" onclick="_setShipMode(\'single\')">📷 낱개 스캔</button>'+
+    '<button type="button" class="fb'+(_shipMode==='list'?' on':'')+'" style="flex:1;" onclick="_setShipMode(\'list\')">📋 발송목록 캡처</button>'+
+  '</div>';
+}
+function _setShipMode(mode){
+  if(_shipMode===mode)return;
+  _shipMode=mode;
+  if(mode==='list'&&!_shipListRows.length&&!_shipListPendingImages.length)_shipListPickerMode=true;
+  _renderShipScanModal();
+}
+
 function _renderShipScanModal(feedback){
+  if(_shipMode==='list'){_renderShipListModal(feedback);return;}
   var cnt=_shipBox.length;
   var rows=cnt
     ? _shipBox.map(function(it,i){
@@ -1942,6 +1959,7 @@ function _renderShipScanModal(feedback){
     : '';
 
   document.getElementById('shipScanBody').innerHTML=
+    _shipModeSwitchHtml()+
     '<div style="font-weight:700;margin-bottom:8px;">이번 박스: '+cnt+'개</div>'+
     '<div style="max-height:240px;overflow-y:auto;margin-bottom:10px;">'+rows+'</div>'+
     (feedback?'<div style="margin-bottom:10px;">'+feedback+'</div>':'')+
@@ -1951,15 +1969,25 @@ function _renderShipScanModal(feedback){
 
 function openShipScanModal(){
   _shipBox=[];
+  _shipMode='single';
+  _shipListPendingImages=[];
+  _shipListPickerMode=false;
+  _shipListRows=[];
   document.getElementById('shipScanModal').style.display='flex';
   _renderShipScanModal();
 }
 
 function closeShipScanModal(){
-  if(_shipBox.length){
-    if(!confirm('이번 박스('+_shipBox.length+'개)가 아직 발송완료 처리 안 됐어요. 닫을까요?'))return;
+  var pendingList=_shipListRows.filter(function(r){return r.matched&&!r.excluded;}).length;
+  var pendingTotal=_shipBox.length+pendingList;
+  if(pendingTotal){
+    if(!confirm('아직 발송완료 처리 안 된 항목이 있어요 ('+pendingTotal+'개). 닫을까요?'))return;
   }
   _shipBox=[];
+  _shipMode='single';
+  _shipListPendingImages=[];
+  _shipListPickerMode=false;
+  _shipListRows=[];
   document.getElementById('shipScanModal').style.display='none';
 }
 
@@ -2034,6 +2062,221 @@ async function confirmShipDispatch(){
     _shipBox=[];
     document.getElementById('shipScanModal').style.display='none';
     alert(cnt+'개를 발송완료 처리했습니다!');
+    load();
+  }catch(e){alert('발송 처리 오류: '+e.message);}
+}
+
+// ── 발송완료 목록 캡처 (여러 건 일괄) ─────────────────────
+function findHeldExactMatch(productNo,size,usedIds){
+  var nc=normCode(productNo||'');
+  if(!nc)return null;
+  var ns=normSize(size||'');
+  var cands=items.filter(function(it){
+    if(it.status!=='보유중')return false;
+    if(!it.product_code||normCode(it.product_code)!==nc)return false;
+    if(normSize(it.size||'')!==ns)return false;
+    if(usedIds.indexOf(it.id)!==-1)return false;
+    return true;
+  });
+  return fifoSort(cands)[0]||null;
+}
+
+function _buildShipListRows(rows){
+  var usedIds=[];
+  _shipListRows=rows.map(function(r){
+    var matched=findHeldExactMatch(r.product_no,r.size,usedIds);
+    if(matched)usedIds.push(matched.id);
+    return{
+      storage_no:(r.storage_no||'').trim(),
+      product_no:(r.product_no||'').trim(),
+      name:(r.name||'').trim(),
+      size:(r.size||'').trim(),
+      tracking_no:(r.tracking_no||'').trim(),
+      matched:matched,
+      excluded:false
+    };
+  });
+}
+
+function _shipListPickerBody(){
+  var cnt=_shipListPendingImages.length;
+  var thumbs=_shipListPendingImages.map(function(img,i){
+    return '<div style="position:relative;width:60px;height:60px;flex-shrink:0;">'+
+      '<img src="'+img.dataUrl+'" style="width:60px;height:60px;object-fit:cover;border-radius:6px;border:1px solid #e2e0da;"/>'+
+      '<button type="button" onclick="removeShipListPendingImg('+i+')" style="position:absolute;top:-5px;right:-5px;width:18px;height:18px;border-radius:50%;background:#ef4444;color:#fff;border:none;cursor:pointer;font-size:11px;line-height:18px;text-align:center;padding:0;">×</button>'+
+    '</div>';
+  }).join('');
+  var btnStyle=cnt===0?'width:100%;background:#9ca3af;cursor:not-allowed;margin-top:8px;':'width:100%;background:#0d9488;margin-top:8px;';
+  return '<div style="font-size:12px;color:#6b7280;margin-bottom:10px;">크림 앱의 <b>발송완료 목록</b> 화면을 캡처해서 올리면 보관번호·품번·사이즈·송장번호를 한번에 인식해서 보유중 재고와 매칭해요. 목록이 길면 스크롤해서 여러 장 올려도 됩니다.</div>'+
+    '<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">'+
+      '<span style="font-size:13px;font-weight:600;">이미지</span>'+
+      '<span id="_shipListImgCnt" style="font-size:12px;color:#6b7280;">'+cnt+'/5장</span>'+
+    '</div>'+
+    '<div id="_shipListImgThumb" style="display:flex;gap:6px;flex-wrap:wrap;min-height:60px;margin-bottom:10px;">'+thumbs+'</div>'+
+    '<div class="paste-zone">'+
+      '<div style="font-size:26px;margin-bottom:5px;">📋</div>'+
+      '<div style="font-weight:700;font-size:14px;color:#374151;margin-bottom:3px;">Ctrl+V 로 붙여넣기</div>'+
+      '<div style="font-size:12px;">스크린샷을 붙여넣거나 아래에서 파일 선택</div>'+
+    '</div>'+
+    '<button type="button" class="sb" style="width:100%;margin-top:8px;" onclick="document.getElementById(\'shipListFile\').click()">🗂 파일 선택 (여러 장)</button>'+
+    '<button type="button" id="_shipListAnalyzeBtn" class="sb" style="'+btnStyle+'" onclick="analyzeShipListImages()"'+(cnt===0?' disabled':'')+'>분석하기 ('+cnt+'장)</button>';
+}
+
+function _updateShipListPickerUI(){
+  var cnt=_shipListPendingImages.length;
+  var thumbEl=document.getElementById('_shipListImgThumb');
+  var cntEl=document.getElementById('_shipListImgCnt');
+  var btnEl=document.getElementById('_shipListAnalyzeBtn');
+  if(!thumbEl){_renderShipScanModal();return;}
+  thumbEl.innerHTML=_shipListPendingImages.map(function(img,i){
+    return '<div style="position:relative;width:60px;height:60px;flex-shrink:0;">'+
+      '<img src="'+img.dataUrl+'" style="width:60px;height:60px;object-fit:cover;border-radius:6px;border:1px solid #e2e0da;"/>'+
+      '<button type="button" onclick="removeShipListPendingImg('+i+')" style="position:absolute;top:-5px;right:-5px;width:18px;height:18px;border-radius:50%;background:#ef4444;color:#fff;border:none;cursor:pointer;font-size:11px;line-height:18px;text-align:center;padding:0;">×</button>'+
+    '</div>';
+  }).join('');
+  if(cntEl)cntEl.textContent=cnt+'/5장';
+  if(btnEl){
+    btnEl.textContent='분석하기 ('+cnt+'장)';
+    btnEl.disabled=cnt===0;
+    btnEl.style.background=cnt===0?'#9ca3af':'#0d9488';
+    btnEl.style.cursor=cnt===0?'not-allowed':'pointer';
+  }
+}
+
+async function addShipListImages(files){
+  var remaining=5-_shipListPendingImages.length;
+  if(remaining<=0){alert('최대 5장까지 추가할 수 있습니다.');return;}
+  var toAdd=Array.from(files).slice(0,remaining);
+  if(Array.from(files).length>remaining)alert(Array.from(files).length+'장 중 '+remaining+'장만 추가됩니다. (최대 5장)');
+  for(var i=0;i<toAdd.length;i++){
+    var b64=await resizeAndEncode(toAdd[i],1500);
+    _shipListPendingImages.push({b64:b64,dataUrl:'data:image/jpeg;base64,'+b64});
+  }
+  _updateShipListPickerUI();
+}
+
+function removeShipListPendingImg(i){
+  _shipListPendingImages.splice(i,1);
+  _updateShipListPickerUI();
+}
+
+async function runShipListScan(input){
+  if(!input.files||!input.files.length)return;
+  var files=Array.from(input.files);
+  input.value='';
+  await addShipListImages(files);
+}
+
+async function analyzeShipListImages(){
+  if(!_shipListPendingImages.length)return;
+  _shipListPickerMode=false;
+  var cnt=_shipListPendingImages.length;
+  document.getElementById('shipScanBody').innerHTML=_shipModeSwitchHtml()+
+    '<div style="text-align:center;color:#6b7280;padding:24px 0;">🤖 '+cnt+'장 인식 중...</div>';
+  try{
+    var images=_shipListPendingImages.map(function(img){return{data:img.b64,mediaType:'image/jpeg'};});
+    var resp=await fetch('/api/shiplist',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({images:images})});
+    var data=await resp.json();
+    if(data.error){
+      document.getElementById('shipScanBody').innerHTML=_shipModeSwitchHtml()+
+        '<p style="color:#dc2626;font-weight:700;margin-bottom:6px;">❌ 오류 '+(data._claudeStatus?data._claudeStatus+': ':'')+_esc(data.error)+'</p>'+
+        '<button type="button" class="sb" style="width:100%;" onclick="_shipListPickerMode=true;_renderShipScanModal()">다시 시도</button>';
+      return;
+    }
+    var rows=Array.isArray(data.items)?data.items.filter(function(r){return r&&(r.product_no||r.name);}):[];
+    if(!rows.length){
+      document.getElementById('shipScanBody').innerHTML=_shipModeSwitchHtml()+
+        '<p style="color:#d97706;font-weight:700;">⚠️ 발송완료 목록에서 항목을 인식하지 못했습니다.<br><span style="font-size:12px;font-weight:400;color:#6b7280;">크림 발송완료 목록 화면이 잘 보이는 캡처를 올려주세요.</span></p>'+
+        '<button type="button" class="sb" style="width:100%;margin-top:10px;" onclick="_shipListPickerMode=true;_shipListPendingImages=[];_renderShipScanModal()">다시 스캔</button>';
+      return;
+    }
+    _buildShipListRows(rows);
+    _shipListPendingImages=[];
+    _renderShipScanModal();
+  }catch(e){
+    document.getElementById('shipScanBody').innerHTML=_shipModeSwitchHtml()+
+      '<p style="color:#dc2626;">❌ 오류: '+_esc(e.message)+'</p>'+
+      '<button type="button" class="sb" style="width:100%;margin-top:10px;" onclick="_shipListPickerMode=true;_renderShipScanModal()">다시 시도</button>';
+  }
+}
+
+function excludeShipListRow(i){
+  _shipListRows[i].excluded=true;
+  _renderShipScanModal();
+}
+function restoreShipListExcluded(){
+  _shipListRows.forEach(function(r){r.excluded=false;});
+  _renderShipScanModal();
+}
+
+function _shipListReviewBody(feedback){
+  var matchedIdx=[],unmatchedIdx=[];
+  _shipListRows.forEach(function(r,i){
+    if(r.matched&&!r.excluded)matchedIdx.push(i);
+    else if(!r.matched)unmatchedIdx.push(i);
+  });
+  var excludedCnt=_shipListRows.filter(function(r){return r.matched&&r.excluded;}).length;
+
+  var matchedHtml=matchedIdx.length?matchedIdx.map(function(i){
+    var r=_shipListRows[i],it=r.matched;
+    return '<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #f0f0f0;">'+
+      '<span style="flex:1;min-width:0;">'+
+        '<b>'+_esc(dedupeName(it.name,it.brand))+(it.size?' ('+_esc(it.size)+')':'')+'</b>'+
+        '<div style="font-size:11px;color:#6b7280;margin-top:2px;">보관번호: <b style="color:#374151;">'+_esc(r.storage_no||'-')+'</b> · 송장번호: <b style="color:#374151;">'+_esc(r.tracking_no||'-')+'</b></div>'+
+      '</span>'+
+      '<button type="button" onclick="excludeShipListRow('+i+')" title="제외" style="background:none;border:none;cursor:pointer;font-size:20px;color:#9ca3af;line-height:1;flex-shrink:0;padding:0 4px;">×</button>'+
+    '</div>';
+  }).join(''):'<div style="text-align:center;color:#9ca3af;padding:12px 0;font-size:13px;">매칭된 항목 없음</div>';
+
+  var unmatchedHtml=unmatchedIdx.map(function(i){
+    var r=_shipListRows[i];
+    return '<div style="padding:8px 10px;border-bottom:1px solid #fee2e2;font-size:12.5px;">'+
+      '<span style="color:#dc2626;font-weight:700;">매칭 안 됨</span> — '+_esc(r.name||'(상품명 미인식)')+
+      (r.product_no?' · 품번: '+_esc(r.product_no):'')+
+      (r.size?' · 사이즈: '+_esc(r.size):'')+
+    '</div>';
+  }).join('');
+
+  var excludedHtml=excludedCnt?'<div style="font-size:12px;color:#9ca3af;margin:2px 0 8px;">제외됨 '+excludedCnt+'개 · <a href="#" onclick="event.preventDefault();restoreShipListExcluded()" style="color:#3b82f6;">되돌리기</a></div>':'';
+
+  return (feedback?'<div style="margin-bottom:10px;">'+feedback+'</div>':'')+
+    '<div style="font-weight:700;margin-bottom:8px;">인식 '+_shipListRows.length+'행 · <span style="color:#16a34a;">매칭 '+matchedIdx.length+'개</span> · <span style="color:#dc2626;">매칭 안 됨 '+unmatchedIdx.length+'개</span></div>'+
+    '<div style="font-size:12px;font-weight:600;color:#16a34a;margin-bottom:2px;">✅ 매칭됨</div>'+
+    '<div style="max-height:220px;overflow-y:auto;margin-bottom:2px;">'+matchedHtml+'</div>'+
+    excludedHtml+
+    (unmatchedIdx.length?'<div style="font-size:12px;font-weight:600;color:#dc2626;margin:8px 0 2px;">⚠️ 매칭 안 됨 — 화면에서 직접 확인해주세요</div>'+
+      '<div style="max-height:150px;overflow-y:auto;margin-bottom:10px;background:#fef2f2;border-radius:8px;">'+unmatchedHtml+'</div>':'<div style="margin-bottom:10px;"></div>')+
+    '<div style="display:flex;gap:8px;">'+
+      '<button type="button" class="sb" style="flex:1;background:#6b7280;" onclick="_shipListPickerMode=true;_shipListRows=[];_renderShipScanModal()">다시 스캔</button>'+
+      (matchedIdx.length?'<button type="button" class="sb" style="flex:2;background:#ef4444;" onclick="confirmShipListDispatch()">📦 발송완료 처리 ('+matchedIdx.length+'개)</button>':'')+
+    '</div>';
+}
+
+function _renderShipListModal(feedback){
+  var body=_shipModeSwitchHtml();
+  body+=_shipListPickerMode?_shipListPickerBody():_shipListReviewBody(feedback);
+  document.getElementById('shipScanBody').innerHTML=body;
+}
+
+async function confirmShipListDispatch(){
+  var toApply=_shipListRows.filter(function(r){return r.matched&&!r.excluded;});
+  if(!toApply.length){alert('발송완료 처리할 항목이 없습니다.');return;}
+  if(!sb){alert('설정 탭에서 Supabase 키를 먼저 입력해주세요.');return;}
+  var unmatchedCnt=_shipListRows.filter(function(r){return !r.matched;}).length;
+  if(!confirm(toApply.length+'개 항목을 발송완료 처리할까요?\n(보관번호·송장번호가 함께 저장됩니다)'))return;
+  try{
+    var results=await Promise.all(toApply.map(function(r){
+      return sb.from('items').update({status:'발송완료',storage_no:r.storage_no||null,tracking_no:r.tracking_no||null}).eq('id',r.matched.id);
+    }));
+    var err=results.find(function(res){return res.error;});
+    if(err){alert('오류: '+err.error.message);return;}
+    var cnt=toApply.length;
+    _shipListRows=[];
+    _shipListPendingImages=[];
+    _shipMode='single';
+    document.getElementById('shipScanModal').style.display='none';
+    alert(cnt+'개를 발송완료 처리했습니다!'+(unmatchedCnt?'\n매칭 안 된 '+unmatchedCnt+'개는 반영되지 않았어요 — 수동으로 처리해주세요.':''));
     load();
   }catch(e){alert('발송 처리 오류: '+e.message);}
 }
@@ -2176,7 +2419,11 @@ document.addEventListener('paste',function(e){
     return;
   }
   if(sellOpen){if(_sellPickerMode)addSellImages(imgs);return;}
-  if(shipOpen){_processShipScan(imgs[0]);return;}
+  if(shipOpen){
+    if(_shipMode==='list'){if(_shipListPickerMode)addShipListImages(imgs);return;}
+    _processShipScan(imgs[0]);
+    return;
+  }
   if(scanOpen){_runScanFiles(imgs);return;}
 });
 
