@@ -13,17 +13,18 @@ export default async function handler(req, res) {
 
   const prompt =
     '이 크림(Kream) 판매완료·정산 내역 화면에서 각 판매 건을 추출해 JSON 배열만 반환:\n' +
-    '[{"product_code":"","name":"","size":"","sell_price":0,"settlement_amount":0,"sell_date":""}]\n' +
+    '[{"product_code":"","storage_no":"","name":"","size":"","sell_price":0,"settlement_amount":0,"sell_date":""}]\n' +
     '\n' +
     '- product_code: 품번/스타일코드. 보통 상품명 바로 위 또는 앞쪽에 있는 영문+숫자 코드 (예: JV5845, JC6235, BFUPL001-760-001, DV0833-100). ' +
-    '절대 혼동하지 말 것: (1) 상품명 자체를 품번으로 쓰지 말 것, (2) "I-"로 시작하는 크림 보관번호(내부 관리번호)는 품번이 아니므로 절대 product_code에 넣지 말 것. ' +
+    '절대 혼동하지 말 것: (1) 상품명 자체를 품번으로 쓰지 말 것, (2) "I-"로 시작하는 크림 보관번호(내부 관리번호)는 품번이 아니므로 절대 product_code에 넣지 말 것 — storage_no에 넣을 것. ' +
     '정확히 읽지 못했거나 확신이 없으면 절대 추측하지 말고 빈 문자열 "".\n' +
+    '- storage_no: 보관번호. "I-"로 시작하는 영문+숫자+하이픈 코드 (예: I-SW12421604-1). 화면에 보이는 그대로 정확히. 못 찾으면 "".\n' +
     '- name: 상품명. 없으면 "".\n' +
     '- size: 사이즈 (예: 270, US 10, XL). 없으면 "".\n' +
     '- sell_price: 판매가 개당 정수. 없으면 0.\n' +
     '- settlement_amount: 정산금액 개당 정수. 없으면 0.\n' +
     '- sell_date: 판매일 YYYY-MM-DD. 화면에 보이면 그대로, 없으면 "". 정산 대기·처리 중·pending 같은 비날짜 텍스트는 빈 문자열로.\n' +
-    '⚠️ 추측·임의 입력 금지. 특히 product_code는 화면에 실제로 보이는 문자 그대로만 넣고, 불확실하면 빈 문자열로 둘 것. 화면에 보이는 값만. 합계·수수료 요약줄 제외.\n' +
+    '⚠️ 추측·임의 입력 금지. 특히 product_code·storage_no는 화면에 실제로 보이는 문자 그대로만 넣고, 불확실하면 빈 문자열로 둘 것. 화면에 보이는 값만. 합계·수수료 요약줄 제외.\n' +
     '여러 장이면 모두 합쳐 중복 없이 하나의 배열로.\n' +
     '설명 없이 JSON 배열만.';
 
