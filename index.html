@@ -2720,6 +2720,12 @@ function _buildSellRows(){
   });
 }
 
+function _fillSellDates(aiItems){
+  var today=new Date().toISOString().split('T')[0];
+  aiItems.forEach(function(ai){if(!ai.sell_date)ai.sell_date=today;});
+  return aiItems;
+}
+
 async function analyzeSellImages(){
   if(!_sellPendingImages.length)return;
   _sellPickerMode=false;
@@ -2739,7 +2745,7 @@ async function analyzeSellImages(){
       openSellModal('<p style="color:#d97706;font-weight:700;">⚠️ 판매 항목을 인식하지 못했습니다.<br><span style="font-size:12px;font-weight:400;color:#6b7280;">크림 정산 내역이 잘 보이는 캡처를 올려주세요.</span></p>','');
       return;
     }
-    _sellAiItems=its;
+    _sellAiItems=_fillSellDates(its);
     _buildSellRows();
     showSellPreview();
   }catch(e){
@@ -2750,7 +2756,7 @@ async function analyzeSellImages(){
 function resumeSellCache(){
   var cache=_loadSellCache();
   if(!cache||!cache.aiItems||!cache.aiItems.length)return;
-  _sellAiItems=cache.aiItems;
+  _sellAiItems=_fillSellDates(cache.aiItems);
   _sellPickerMode=false;
   _sellPendingImages=[];
   _buildSellRows();
