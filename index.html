@@ -181,7 +181,7 @@ button.dfb.on{background:#1a1a1a;color:#fff;border-color:#1a1a1a;}
       <div class="stat"><div class="sl">오늘 매입</div><div class="sv" id="h4">-</div></div>
     </div>
     <div class="search-wrap">
-      <input class="search-input" type="text" id="searchInput" placeholder="상품명, 브랜드, 상품코드, 사이즈로 검색..." oninput="searchQ=this.value;render()">
+      <input class="search-input" type="text" id="searchInput" placeholder="상품명, 브랜드, 품번, 사이즈, 보관번호, 송장번호로 검색..." oninput="searchQ=this.value;render()">
     </div>
     <div class="toolbar">
       <button class="fb on" onclick="filt('all',this)">전체</button>
@@ -960,7 +960,9 @@ function render(){
       if((i.name||'').toLowerCase().indexOf(q)<0&&
          (i.brand||'').toLowerCase().indexOf(q)<0&&
          (i.product_code||'').toLowerCase().indexOf(q)<0&&
-         (i.size||'').toLowerCase().indexOf(q)<0)return false;
+         (i.size||'').toLowerCase().indexOf(q)<0&&
+         (i.storage_no||'').toLowerCase().indexOf(q)<0&&
+         (i.tracking_no||'').toLowerCase().indexOf(q)<0)return false;
     }
     if(dateFilterMode!=='all'){
       var now2=new Date();
@@ -1133,6 +1135,8 @@ function buildEditForm(it,ekey){
       '<div id="epfsd'+it.id+'" style="'+(it.platform==='크림(보관)'?'':'display:none;')+'"><div class="il">입고일 (크림 창고)</div><input type="date" id="esd2'+it.id+'" value="'+(it.storage_date||(it.platform==='크림(보관)'?new Date().toISOString().split('T')[0]:''))+'" style="'+s+'"></div>'+
       '<div><div class="il">배송비 (개당)</div><input type="number" id="esc'+it.id+'" value="'+(it.shipping_cost||'')+'" style="'+s+'" placeholder="0"></div>'+
       '<div><div class="il">기타비용</div><input type="number" id="eoc'+it.id+'" value="'+(it.other_cost||'')+'" style="'+s+'" placeholder="0"></div>'+
+      '<div><div class="il">보관번호</div><input type="text" id="esn'+it.id+'" value="'+esc(it.storage_no)+'" style="'+s+'" placeholder="I-XXXXXXXX-1"></div>'+
+      '<div><div class="il">송장번호</div><input type="text" id="etn'+it.id+'" value="'+esc(it.tracking_no)+'" style="'+s+'" placeholder="408885868882"></div>'+
       '<div style="grid-column:1/-1"><div class="il">주문내역 URL</div><input type="url" id="eurl'+it.id+'" value="'+esc(it.order_url)+'" style="'+s+'" placeholder="https://..."></div>'+
       '<div style="grid-column:1/-1"><div class="il">메모</div><input type="text" id="em'+it.id+'" value="'+esc(it.note)+'" style="'+s+'"></div>'+
     '</div>'+
@@ -1207,6 +1211,8 @@ function card(it,batchNum,totalBatches){
   }
   if(it.shipping_cost>0){metaItems+='<div><div class="ml">배송비</div><div class="mv">'+(it.shipping_cost).toLocaleString()+'원</div></div>';}
   if(it.other_cost>0){metaItems+='<div><div class="ml">기타비용</div><div class="mv">'+(it.other_cost).toLocaleString()+'원</div></div>';}
+  if(it.storage_no){metaItems+='<div><div class="ml">보관번호</div><div class="mv" style="font-family:monospace;font-size:12px;">'+it.storage_no+'</div></div>';}
+  if(it.tracking_no){metaItems+='<div><div class="ml">송장번호</div><div class="mv" style="font-family:monospace;font-size:12px;">'+it.tracking_no+'</div></div>';}
   if(it.note){metaItems+='<div style="grid-column:1/-1"><div class="ml">메모</div><div class="mv" style="font-size:12px;">'+it.note+'</div></div>';}
 
   var isExpanded=expanded.has(String(it.id));
@@ -1310,13 +1316,17 @@ function card(it,batchNum,totalBatches){
     '<button class="qa-btn qa-danger" onclick="event.stopPropagation();del(\''+it.id+'\')" title="삭제">🗑️</button>'+
   '</span>';
 
+  var shipTag=['발송완료','판매대기','판매완료'].indexOf(it.status)!==-1
+    ?(it.tracking_no?'송장 '+it.tracking_no:(it.storage_no?'보관 '+it.storage_no:null))
+    :null;
+
   return '<div class="'+(isGrouped?'group-card':'card')+(it.status==='취소/환불'?' card-cancelled':'')+'" id="card-'+it.id+'">'+
     '<div class="ctop" onclick="toggleCard(\''+it.id+'\')" style="cursor:pointer;user-select:none;">'+
       chkBox+
       '<div style="flex:1;min-width:0;">'+
         '<div class="cn">'+titleHtml+'</div>'+
         '<div class="cs">'+
-          [it.size,it.source,it.buy_date?'매입 '+it.buy_date:null,it.buy_price?(it.buy_price).toLocaleString()+'원':'매입가 미입력'].filter(Boolean).join(' · ')+
+          [it.size,it.source,it.buy_date?'매입 '+it.buy_date:null,it.buy_price?(it.buy_price).toLocaleString()+'원':'매입가 미입력',shipTag].filter(Boolean).join(' · ')+
         '</div>'+
       '</div>'+
       '<div class="badges">'+storageBadge+noDateBadge+fifoBadge+(function(){
@@ -2657,6 +2667,31 @@ function findAlreadySold(aiItem){
     return _sellCodeMatch(it,nc);
   }));
 }
+
+// ── 판매완료 중복 처리 방지 ────────────────────────────────
+function _storageNoNorm(s){return (s||'').toString().toUpperCase().replace(/\s/g,'');}
+function findDuplicateSoldByStorage(storageNo){
+  var sn=_storageNoNorm(storageNo);
+  if(!sn)return null;
+  return items.find(function(it){return it.status==='판매완료'&&_storageNoNorm(it.storage_no)===sn;})||null;
+}
+function findDuplicateSoldByFallback(aiItem){
+  var nm=(aiItem.name||'').toLowerCase().replace(/\s/g,'');
+  var ns=normSize(aiItem.size||'');
+  var settleTarget=aiItem.settlement_amount||0;
+  if(!nm||!settleTarget)return null;
+  return items.find(function(it){
+    if(it.status!=='판매완료')return false;
+    if((it.name||'').toLowerCase().replace(/\s/g,'')!==nm)return false;
+    if(normSize(it.size||'')!==ns)return false;
+    var derivedSettle=(it.sell_price||0)*(it.sold_quantity||it.quantity||1)-(it.fee||0);
+    return derivedSettle===settleTarget;
+  })||null;
+}
+function findDuplicateSold(aiItem){
+  if(aiItem.storage_no)return findDuplicateSoldByStorage(aiItem.storage_no);
+  return findDuplicateSoldByFallback(aiItem);
+}
 function _aiCodeLine(aiItem){
   var code=aiItem&&aiItem.product_code?String(aiItem.product_code).trim():'';
   return '<div style="font-size:11px;color:#6b7280;margin-top:2px;">AI 인식 품번: '+
@@ -2667,11 +2702,18 @@ function _aiCodeLine(aiItem){
 function _buildSellRows(){
   var usedIds=[];
   _sellRows=_sellAiItems.map(function(aiItem){
+    var dup=findDuplicateSold(aiItem);
+    if(dup){
+      return{aiItem:aiItem,matched:null,alts:[],alreadySold:[],isDuplicate:true,duplicateOf:dup,
+        sellPrice:aiItem.sell_price||0,
+        settlementAmount:aiItem.settlement_amount||0,
+        sellDate:aiItem.sell_date||''};
+    }
     var alts=findSellCandidates(aiItem).filter(function(it){return usedIds.indexOf(it.id)===-1;});
     var matched=alts[0]||null;
     if(matched)usedIds.push(matched.id);
     var alreadySold=!matched?findAlreadySold(aiItem):[];
-    return{aiItem:aiItem,matched:matched,alts:alts,alreadySold:alreadySold,
+    return{aiItem:aiItem,matched:matched,alts:alts,alreadySold:alreadySold,isDuplicate:false,duplicateOf:null,
       sellPrice:aiItem.sell_price||0,
       settlementAmount:aiItem.settlement_amount||0,
       sellDate:aiItem.sell_date||''};
@@ -2792,6 +2834,23 @@ function renderSellRow(row,i){
   var today=new Date().toISOString().split('T')[0];
   var xBtn='<button type="button" onclick="removeSellRow('+i+')" style="position:absolute;top:6px;right:8px;background:none;border:none;cursor:pointer;font-size:18px;color:#9ca3af;line-height:1;">×</button>';
 
+  // ── 중복(이미 판매완료 처리됨) ────────────────────────
+  if(row.isDuplicate){
+    var dup=row.duplicateOf;
+    return '<div id="_sv'+i+'" style="border:1px solid #fca5a5;border-radius:8px;padding:10px 12px 8px;margin-bottom:10px;background:#fef2f2;position:relative;">'+
+      xBtn+
+      '<div style="padding-right:28px;margin-bottom:6px;font-size:13px;color:#374151;font-weight:600;">'+
+        _esc(row.aiItem.name||row.aiItem.product_code||('항목 '+(i+1)))+
+        (row.aiItem.size?' <span style="font-weight:400;color:#888;">'+_esc(row.aiItem.size)+'</span>':'')+
+      '</div>'+
+      '<div style="background:#fee2e2;border-radius:8px;padding:8px 12px;">'+
+        '<div style="'+lStyle+'color:#dc2626;font-weight:700;margin-bottom:3px;">🚫 이미 판매완료된 항목입니다'+(dup.storage_no?' (보관번호: '+_esc(dup.storage_no)+')':'')+'</div>'+
+        '<div style="font-weight:700;font-size:13px;margin-top:4px;">'+_esc(scanLabel(dup))+'</div>'+
+        '<div style="font-size:11px;color:#9ca3af;margin-top:2px;">판매일 '+_esc(dup.sell_date||'-')+'</div>'+
+      '</div>'+
+    '</div>';
+  }
+
   // ── 새 항목 등록 모드 ─────────────────────────────────
   if(row.newItemMode){
     var ai=row.aiItem;
@@ -2903,8 +2962,10 @@ function showSellPreview(){
     openSellModal('<p style="color:#d97706;font-weight:700;">⚠️ 판매 항목이 없습니다.</p>','');
     return;
   }
-  var unmatched=_sellRows.filter(function(r){return !r.matched&&!(r.alreadySold&&r.alreadySold.length)&&!r.newItemMode;}).length;
-  var sub=unmatched?'<p style="font-size:11px;color:#dc2626;margin-bottom:8px;">⚠️ '+unmatched+'건 매칭 안 됨 — 재고 항목을 직접 선택해주세요</p>':'';
+  var unmatched=_sellRows.filter(function(r){return !r.matched&&!r.isDuplicate&&!(r.alreadySold&&r.alreadySold.length)&&!r.newItemMode;}).length;
+  var dupCnt=_sellRows.filter(function(r){return r.isDuplicate;}).length;
+  var sub=(unmatched?'<p style="font-size:11px;color:#dc2626;margin-bottom:8px;">⚠️ '+unmatched+'건 매칭 안 됨 — 재고 항목을 직접 선택해주세요</p>':'')+
+    (dupCnt?'<p style="font-size:11px;color:#dc2626;margin-bottom:8px;">🚫 '+dupCnt+'건은 이미 판매완료 처리된 중복 항목이라 자동으로 건너뜁니다</p>':'');
   var rows=_sellRows.map(function(row,i){return renderSellRow(row,i);}).join('');
   openSellModal(
     '<p id="_svHdr" style="font-weight:700;margin-bottom:4px;">'+_sellRows.length+'건 — 확인 후 판매완료 처리</p>'+sub+rows,
@@ -2919,9 +2980,12 @@ async function confirmSellRegister(){
   var today=new Date().toISOString().split('T')[0];
   var updates=[],inserts=[];
   var usedItemIds=[];
+  var dupSkipped=0;
   for(var i=0;i<_sellRows.length;i++){
     if(!document.getElementById('_sv'+i))continue;
     var row=_sellRows[i];
+    // 중복(같은 보관번호로 이미 판매완료 처리됨) — 건너뜀
+    if(row.isDuplicate){dupSkipped++;continue;}
     // 이미 판매완료 — 건너뜀
     if(!row.matched&&row.alreadySold&&row.alreadySold.length)continue;
     var rSp=parseInt((document.getElementById('_sv_sp_'+i)||{}).value)||0;
@@ -2963,7 +3027,10 @@ async function confirmSellRegister(){
       alert((i+1)+'번 항목: 재고를 선택하거나 "+ 새 항목으로 등록"을 눌러주세요.');return;
     }
   }
-  if(!updates.length&&!inserts.length){alert('처리할 항목이 없습니다.');return;}
+  if(!updates.length&&!inserts.length){
+    alert(dupSkipped?'모두 중복이라 처리할 항목이 없습니다. (중복 건너뜀 '+dupSkipped+'건)':'처리할 항목이 없습니다.');
+    return;
+  }
   try{
     var ops=updates.map(function(u){return sb.from('items').update(u.data).eq('id',u.id);});
     if(inserts.length)ops.push(sb.from('items').insert(inserts));
@@ -2974,7 +3041,7 @@ async function confirmSellRegister(){
     _sellRows=[];_sellAiItems=[];
     document.getElementById('sellModal').style.display='none';
     var total=updates.length+inserts.length;
-    alert(total+'건을 판매완료 처리했습니다!'+(inserts.length?' (신규 등록 '+inserts.length+'건 포함)':''));
+    alert('처리 '+total+'건'+(dupSkipped?', 중복 건너뜀 '+dupSkipped+'건':'')+'!'+(inserts.length?' (신규 등록 '+inserts.length+'건 포함)':''));
     load();
   }catch(e){alert('처리 오류: '+e.message);}
 }
@@ -3326,6 +3393,8 @@ async function updateItem(id){
   var qty=parseInt(document.getElementById('eq'+id).value)||1;
   var date=document.getElementById('ed'+id).value;
   var note=document.getElementById('em'+id).value.trim();
+  var storageNo=document.getElementById('esn'+id).value.trim();
+  var trackingNo=document.getElementById('etn'+id).value.trim();
   var orderUrl=document.getElementById('eurl'+id).value.trim();
   var sellPrice=parseInt(document.getElementById('esp'+id).value)||0;
   var sellDate=document.getElementById('esd'+id).value;
@@ -3337,7 +3406,8 @@ async function updateItem(id){
   var origSettle=origSellPrice*origSq-(item?item.fee||0:0);
   var updateData={
     name:name,brand:brand,category:category,size:size,product_code:productCode,
-    source:source,buy_price:price,quantity:qty,buy_date:date,note:note,order_url:orderUrl
+    source:source,buy_price:price,quantity:qty,buy_date:date,note:note,order_url:orderUrl,
+    storage_no:storageNo||null,tracking_no:trackingNo||null
   };
   var platform=document.getElementById('epf'+id).value;
   var storageDate=platform==='크림(보관)'?(document.getElementById('esd2'+id)||{}).value||null:null;
