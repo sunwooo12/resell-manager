@@ -122,8 +122,10 @@ button.dfb{padding:5px 12px;border-radius:999px;border:1px solid #e2e0da;backgro
 button.dfb.on{background:#1a1a1a;color:#fff;border-color:#1a1a1a;}
 .date-summary{font-size:12px;color:#555;background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:6px 12px;margin-bottom:8px;display:none;}
 .search-input:focus{border-color:#1a1a1a;}
-.bundle-bar{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1a1a1a;color:#fff;padding:14px 24px;border-radius:14px;display:flex;align-items:center;gap:14px;box-shadow:0 4px 24px rgba(0,0,0,0.28);z-index:100;font-size:14px;white-space:nowrap;}
-.bundle-bar button{padding:8px 18px;border-radius:8px;border:none;font-size:13px;font-family:'Noto Sans KR',sans-serif;cursor:pointer;font-weight:700;}
+.bundle-bar{position:fixed;left:0;right:0;bottom:0;background:#1a1a1a;color:#fff;padding:10px 16px;display:flex;align-items:center;gap:10px;box-shadow:0 -4px 20px rgba(0,0,0,0.28);z-index:100;font-size:13px;flex-wrap:wrap;}
+.bundle-bar button{padding:7px 14px;border-radius:8px;border:none;font-size:12.5px;font-family:'Noto Sans KR',sans-serif;cursor:pointer;font-weight:700;}
+.bulk-fold-btn{background:rgba(255,255,255,0.14);color:#fff;border:none;border-radius:8px;width:30px;height:30px;font-size:13px;cursor:pointer;flex-shrink:0;margin-left:auto;}
+.bulk-fold-btn:hover{background:rgba(255,255,255,0.24);}
 .sel-pop-wrap{position:relative;display:inline-block;}
 .sel-pop-trigger{cursor:pointer;user-select:none;display:inline-flex;align-items:center;gap:4px;padding:4px 6px;border-radius:6px;}
 .sel-pop-trigger:hover{background:rgba(255,255,255,0.12);}
@@ -442,7 +444,7 @@ ALTER TABLE items ADD COLUMN IF NOT EXISTS other_cost INT DEFAULT 0;</div>
 
 </main>
 <script>
-var sb=null,items=[],cf='all',pf='all',oid=null,expanded=new Set(),checkedItems=new Set(),searchQ='',sortAsc=true,dateFilterMode='all',dateFilterCustom='',dateFilterYm='',grpExpanded=new Set(),selPopOpen=false;
+var sb=null,items=[],cf='all',pf='all',oid=null,expanded=new Set(),checkedItems=new Set(),searchQ='',sortAsc=true,dateFilterMode='all',dateFilterCustom='',dateFilterYm='',grpExpanded=new Set(),selPopOpen=false,bulkBarCollapsed=false;
 var PLATFORMS=['크림(일반)','크림(보관)','포이즌','기타'];
 var tabs=['t0','t1','t2','t3','t4'],secs=['s0','s1','s2','s3','s4'];
 
@@ -504,31 +506,62 @@ function toggleGroupItems(idStr,checked){
 function updateBundleBar(){
   var el=document.getElementById('bundleBarWrap');
   if(!el)return;
-  if(checkedItems.size>0){
+  if(checkedItems.size===0){
+    el.innerHTML='';
+    selPopOpen=false;
+    bulkBarCollapsed=false;
+    setBulkBarListPad(0);
+    return;
+  }
+  var selPopHtml='<div class="sel-pop-wrap">'+
+      '<span class="sel-pop-trigger" onclick="event.stopPropagation();toggleSelPop()">'+checkedItems.size+'개 선택됨</span>'+
+      '<div class="sel-pop" id="selPop" style="display:none;" onclick="event.stopPropagation();"></div>'+
+    '</div>';
+  if(bulkBarCollapsed){
+    el.innerHTML='<div class="bundle-bar" style="padding:8px 16px;flex-wrap:nowrap;">'+
+      selPopHtml+
+      '<button class="bulk-fold-btn" onclick="toggleBulkBarCollapsed()" title="펼치기">▲</button>'+
+    '</div>';
+    setBulkBarListPad(52);
+  }else{
     var opts=['주문완료','보유중','발송완료','판매대기','판매완료','취소/환불'];
-    var sources=['SSG','무신사','네이버','GS SHOP','29CM','W컨셉','나이키공홈','아디다스공홈','쿠팡','롯데온','4910','에이블리','지그재그','ABC마트','오프라인','기타'];
     var inS='padding:6px 10px;border-radius:8px;border:none;font-size:13px;font-family:\'Noto Sans KR\',sans-serif;background:#333;color:#fff;cursor:pointer;';
-    el.innerHTML='<div class="bundle-bar" style="flex-wrap:wrap;gap:10px;">'+
-      '<div class="sel-pop-wrap">'+
-        '<span class="sel-pop-trigger" onclick="event.stopPropagation();toggleSelPop()">'+checkedItems.size+'개 선택됨</span>'+
-        '<div class="sel-pop" id="selPop" style="display:none;" onclick="event.stopPropagation();"></div>'+
-      '</div>'+
+    el.innerHTML='<div class="bundle-bar">'+
+      selPopHtml+
       '<button style="background:#3b82f6;color:#fff;" onclick="bundleShip()">묶음 발송</button>'+
       '<button style="background:#0d9488;color:#fff;" onclick="copySelectedCodes()">품번 복사</button>'+
-      '<span style="width:1px;height:20px;background:#444;display:inline-block;"></span>'+
-      '<select id="bulkStatusSel" style="'+inS+'"><option value="">상태 선택</option>'+opts.map(function(s){return '<option>'+s+'</option>';}).join('')+'</select>'+
-      '<input type="date" id="bulkDateIn" style="'+inS+'">'+
-      '<input type="number" id="bulkPriceIn" placeholder="매입가" style="'+inS+'width:90px;">'+
-      '<select id="bulkSourceSel" style="'+inS+'"><option value="">매입처 선택</option>'+sources.map(function(s){return '<option>'+s+'</option>';}).join('')+'</select>'+
-      '<select id="bulkPlatformSel" style="'+inS+'"><option value="">플랫폼 선택</option>'+['크림(일반)','크림(보관)','포이즌'].map(function(s){return '<option>'+s+'</option>';}).join('')+'</select>'+
-      '<input type="date" id="bulkStorageDateIn" style="'+inS+'">'+
-      '<button style="background:#16a34a;color:#fff;font-weight:700;" onclick="bulkUpdateAll()">일괄 변경</button>'+
-      '<button style="background:#555;color:#fff;" onclick="checkedItems.clear();render()">선택 해제</button>'+
-      '<span style="width:1px;height:20px;background:#444;display:inline-block;"></span>'+
-      '<button style="background:#dc2626;color:#fff;font-weight:700;margin-left:16px;" onclick="bulkDeleteAll()">선택 삭제</button>'+
+      '<select id="bulkStatusSel" style="'+inS+'" onchange="bulkChangeStatus(this)"><option value="">상태 선택</option>'+opts.map(function(s){return '<option>'+s+'</option>';}).join('')+'</select>'+
+      '<button style="background:#dc2626;color:#fff;font-weight:700;" onclick="bulkDeleteAll()">선택 삭제</button>'+
+      '<button style="background:#555;color:#fff;" onclick="checkedItems.clear();bulkBarCollapsed=false;render()">선택 해제</button>'+
+      '<button class="bulk-fold-btn" onclick="toggleBulkBarCollapsed()" title="접기">▼</button>'+
     '</div>';
-    syncSelPop();
-  }else{el.innerHTML='';selPopOpen=false;}
+    setBulkBarListPad(76);
+  }
+  syncSelPop();
+}
+function toggleBulkBarCollapsed(){
+  bulkBarCollapsed=!bulkBarCollapsed;
+  updateBundleBar();
+}
+function setBulkBarListPad(px){
+  var l=document.getElementById('itemList');
+  if(l)l.style.paddingBottom=px?px+'px':'';
+}
+async function bulkChangeStatus(sel){
+  var status=sel.value;
+  if(!status)return;
+  var ids=Array.from(checkedItems);
+  if(!ids.length){sel.value='';return;}
+  if(!confirm(ids.length+'개 항목을 \''+status+'\' 상태로 변경할까요?')){sel.value='';return;}
+  var sy=window.scrollY;
+  for(var i=0;i<ids.length;i++){
+    var res=await sb.from('items').update({status:status}).eq('id',ids[i]);
+    if(res.error){alert('오류: '+res.error.message);return;}
+  }
+  checkedItems.clear();
+  bulkBarCollapsed=false;
+  await load();
+  window.scrollTo(0,sy);
 }
 function toggleSelPop(){
   selPopOpen=!selPopOpen;
