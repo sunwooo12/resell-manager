@@ -219,7 +219,7 @@ button.dfb.on{background:#1a1a1a;color:#fff;border-color:#1a1a1a;}
           <button class="fb" id="sortBtn" onclick="sortAsc=!sortAsc;document.getElementById('sortBtn').textContent=sortAsc?'오래된순 ↑':'최신순 ↓';render()">오래된순 ↑</button>
         </div>
         <div class="date-filter-card">
-          <div class="date-filter-card-title">매입일 필터</div>
+          <div class="date-filter-card-title" id="dateFilterCardTitle">매입일 필터</div>
           <div class="date-filter-row">
             <span class="date-filter-row-label">빠른 선택</span>
             <button class="dfb" id="dfb-today" onclick="setDateFilter('today')">오늘</button>
@@ -761,6 +761,7 @@ async function confirmBundleShip(){
     var it=items.find(function(x){return String(x.id)===ids[i];});
     var curShip=it?it.shipping_cost||0:0;
     var updateData={status:'발송완료',platform:platform,shipping_cost:curShip+per};
+    if(!it||it.status!=='발송완료')updateData.shipped_date=new Date().toISOString().split('T')[0];
     var res=await sb.from('items').update(updateData).eq('id',ids[i]);
     if(res.error){alert('오류: '+res.error.message);return;}
   }
@@ -899,6 +900,20 @@ function updateFilterDot(){
   var active=pf!=='all'||cat!=='all'||dateFilterMode!=='all';
   document.getElementById('filterDot').classList.toggle('on',active);
 }
+function dateFieldFor(){
+  if(cf==='발송완료')return 'shipped_date';
+  if(cf==='판매완료')return 'sell_date';
+  return 'buy_date';
+}
+function dateFieldLabel(){
+  if(cf==='발송완료')return '발송완료일';
+  if(cf==='판매완료')return '판매일';
+  return '매입일';
+}
+function updateDateFilterCardTitle(){
+  var t=document.getElementById('dateFilterCardTitle');
+  if(t)t.textContent=dateFieldLabel()+' 필터';
+}
 function setDateFilter(mode,val){
   dateFilterMode=mode;
   dateFilterCustom=(mode==='custom'&&val)?val:'';
@@ -951,6 +966,8 @@ function render(){
   var cat=document.getElementById('catFilter').value;
   updateFilterDot();
   updateYmLabel();
+  updateDateFilterCardTitle();
+  var dateField=dateFieldFor();
   var filtered=items.filter(function(i){
     if(cf!=='all'&&i.status!==cf)return false;
     if(cat!=='all'&&(i.category||'기타')!==cat)return false;
@@ -972,7 +989,7 @@ function render(){
       var yd=toStr(new Date(now2.getFullYear(),now2.getMonth(),now2.getDate()-1));
       var w7=toStr(new Date(now2.getFullYear(),now2.getMonth(),now2.getDate()-6));
       var mm2=now2.getFullYear()+'-'+pad2(now2.getMonth()+1);
-      var bd=i.buy_date||'';
+      var bd=i[dateField]||'';
       if(dateFilterMode==='today'&&bd!==td)return false;
       if(dateFilterMode==='yesterday'&&bd!==yd)return false;
       if(dateFilterMode==='week'&&(bd<w7||bd>td))return false;
@@ -986,7 +1003,7 @@ function render(){
   if(sumEl){
     if(dateFilterMode!=='all'){
       var totalBuyCost=filtered.reduce(function(s,i){return s+(i.buy_price||0)*(i.quantity||1);},0);
-      sumEl.textContent=filtered.length+'건 · 매입가 합계 '+totalBuyCost.toLocaleString()+'원';
+      sumEl.textContent=filtered.length+'건 · 매입가 합계 '+totalBuyCost.toLocaleString()+'원 · '+dateFieldLabel()+' 기준';
       sumEl.style.display='block';
     }else{sumEl.style.display='none';}
   }
@@ -2069,7 +2086,8 @@ async function confirmShipDispatch(){
   if(!sb){alert('설정 탭에서 Supabase 키를 먼저 입력해주세요.');return;}
   var ids=_shipBox.map(function(it){return it.id;});
   try{
-    var results=await Promise.all(ids.map(function(id){return sb.from('items').update({status:'발송완료'}).eq('id',id);}));
+    var shipToday=new Date().toISOString().split('T')[0];
+    var results=await Promise.all(ids.map(function(id){return sb.from('items').update({status:'발송완료',shipped_date:shipToday}).eq('id',id);}));
     var err=results.find(function(r){return r.error;});
     if(err){alert('오류: '+err.error.message);return;}
     var cnt=_shipBox.length;
@@ -2417,7 +2435,7 @@ async function confirmShipListDispatch(){
   try{
     var results=await Promise.all(toApply.map(function(r){
       var upd={storage_no:r.storage_no||null,tracking_no:r.tracking_no||null};
-      if(r.matched.status==='보유중')upd.status='발송완료';
+      if(r.matched.status==='보유중'){upd.status='발송완료';upd.shipped_date=new Date().toISOString().split('T')[0];}
       return sb.from('items').update(upd).eq('id',r.matched.id);
     }));
     var err=results.find(function(res){return res.error;});
@@ -3336,6 +3354,7 @@ async function confShipWithPlatform(id){
   var shipCost=parseInt(document.getElementById('lship'+id).value)||0;
   var item=items.find(function(i){return i.id==id;});
   var updateData={status:'발송완료',platform:platform,shipping_cost:(item.shipping_cost||0)+shipCost};
+  if(!item||item.status!=='발송완료')updateData.shipped_date=new Date().toISOString().split('T')[0];
   var res=await sb.from('items').update(updateData).eq('id',id);
   if(res.error){alert('오류: '+res.error.message);return;}
   oid=null;load();
@@ -3510,9 +3529,13 @@ async function updateItem(id){
       updateData.sell_price=null;
       updateData.fee=0;
       updateData.sell_date=null;
+      updateData.shipped_date=null;
     } else if(prePending.indexOf(newStatus)!==-1){
-      // 발송완료: 판매대기 시작일만 초기화
+      // 발송완료: 판매대기 시작일만 초기화 + 발송완료로 새로 전환된 경우 발송일 기록
       updateData.storage_start_date=null;
+      if(newStatus==='발송완료'&&item&&item.status!=='발송완료'){
+        updateData.shipped_date=new Date().toISOString().split('T')[0];
+      }
     }
   }
   // 판매가·정산금액 모두 지우면 판매 취소로 간주 → 보유중 복귀 + 판매 정보 초기화
