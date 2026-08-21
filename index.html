@@ -2115,31 +2115,43 @@ function findHeldCodeMatch(row,usedIds){
 }
 
 // 단계2: DB에 품번이 비어있는 경우 상품명(브랜드 포함) 유사매칭 — 확인 필요(노란색)
-var SHIP_NAME_SYNONYMS=[
+// 오탐 방지: 브랜드 일치 + 구체적 키워드 일치를 함께 요구 (색상/의류종류 같은 흔한 단어만으로는 매칭하지 않음)
+var SHIP_BRAND_SYNONYMS=[
   ['디스이즈네버댓','thisisneverthat'],['나이키','nike'],['아디다스','adidas'],['뉴발란스','newbalance'],
   ['컨버스','converse'],['반스','vans'],['스투시','stussy'],['칼하트','carhartt'],['수프림','supreme'],
-  ['노스페이스','northface'],['아식스','asics'],['호카','hoka'],['살로몬','salomon'],['크록스','crocs'],
-  ['후드','hoodie'],['후드','hood'],['로고','logo'],['그레이','grey'],['그레이','gray'],['헤더','heather'],
-  ['블랙','black'],['화이트','white'],['네이비','navy'],['베이지','beige'],['자켓','jacket'],['팬츠','pants'],
-  ['셔츠','shirt'],['티셔츠','tshirt'],['맨투맨','sweatshirt'],['크루넥','crewneck'],['숏츠','shorts'],
-  ['코트','coat'],['베스트','vest'],['데님','denim'],['슈즈','shoes'],['스니커즈','sneakers'],
-  ['가디건','cardigan'],['니트','knit']
+  ['노스페이스','northface'],['아식스','asics'],['호카','hoka'],['살로몬','salomon'],['크록스','crocs']
+];
+var SHIP_GENERIC_WORDS=[
+  '후드','hoodie','hood','로고','logo','그레이','grey','gray','헤더','heather',
+  '블랙','black','화이트','white','네이비','navy','베이지','beige','자켓','jacket','팬츠','pants',
+  '셔츠','shirt','티셔츠','tshirt','맨투맨','sweatshirt','크루넥','crewneck','숏츠','shorts',
+  '코트','coat','베스트','vest','데님','denim','슈즈','shoes','스니커즈','sneakers',
+  '가디건','cardigan','니트','knit'
 ];
 function _shipNormText(s){return (s||'').toLowerCase().replace(/[^a-z0-9가-힣]/g,'');}
+function _shipDetectBrand(normText){
+  var found=[];
+  SHIP_BRAND_SYNONYMS.forEach(function(pair){
+    if(normText.indexOf(pair[0])!==-1||normText.indexOf(pair[1])!==-1)found.push(pair[1]);
+  });
+  return found;
+}
 function _shipTextSignature(text){
   var norm=_shipNormText(text);
-  var canon=[];
-  SHIP_NAME_SYNONYMS.forEach(function(pair){
-    if(norm.indexOf(pair[0])!==-1||norm.indexOf(pair[1])!==-1)canon.push(pair[1]);
+  var brand=_shipDetectBrand(norm);
+  var words=(text||'').toLowerCase().split(/[^a-z0-9가-힣]+/).filter(function(w){
+    return w.length>=3&&SHIP_GENERIC_WORDS.indexOf(w)===-1;
   });
-  var words=(text||'').toLowerCase().split(/[^a-z0-9가-힣]+/).filter(function(w){return w.length>=3;});
-  return {canon:canon,words:words};
+  return {brand:brand,words:words};
 }
 function _shipNameFuzzyMatch(dbItem,row){
   var a=_shipTextSignature((dbItem.brand||'')+' '+(dbItem.name||''));
   var b=_shipTextSignature(row.name||'');
-  if(a.canon.some(function(c){return b.canon.indexOf(c)!==-1;}))return true;
-  if(a.words.some(function(w){return b.words.indexOf(w)!==-1;}))return true;
+  var brandMatch=a.brand.length>0&&b.brand.length>0&&a.brand.some(function(c){return b.brand.indexOf(c)!==-1;});
+  var sharedWords=a.words.filter(function(w){return b.words.indexOf(w)!==-1;});
+  // 브랜드가 같고 구체적 키워드도 하나 이상 겹치면 매칭. 브랜드를 못 찾았으면 키워드 2개 이상 겹쳐야 매칭(더 엄격).
+  if(brandMatch&&sharedWords.length>=1)return true;
+  if(!brandMatch&&sharedWords.length>=2)return true;
   return false;
 }
 function findHeldNameMatch(row,usedIds){
