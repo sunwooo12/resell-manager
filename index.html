@@ -2096,11 +2096,18 @@ function _shipCodesMatch(scannedRaw,dbRaw){
   }
   return false;
 }
+function _shipCandidateStatusOk(it){return it.status==='보유중'||it.status==='발송완료';}
+function _shipAlreadyProcessed(it,row){
+  var rowSn=_storageNoNorm(row.storage_no);
+  if(!rowSn)return false;
+  return _storageNoNorm(it.storage_no)===rowSn;
+}
 function findHeldCodeMatch(row,usedIds){
   var cands=items.filter(function(it){
-    if(it.status!=='보유중')return false;
+    if(!_shipCandidateStatusOk(it))return false;
     if(!it.product_code)return false;
     if(usedIds.indexOf(it.id)!==-1)return false;
+    if(_shipAlreadyProcessed(it,row))return false;
     if(normSize(it.size||'')!==normSize(row.size||''))return false;
     return _shipCodesMatch(row.product_no,it.product_code);
   });
@@ -2137,9 +2144,10 @@ function _shipNameFuzzyMatch(dbItem,row){
 }
 function findHeldNameMatch(row,usedIds){
   var cands=items.filter(function(it){
-    if(it.status!=='보유중')return false;
+    if(!_shipCandidateStatusOk(it))return false;
     if(it.product_code)return false;
     if(usedIds.indexOf(it.id)!==-1)return false;
+    if(_shipAlreadyProcessed(it,row))return false;
     if(normSize(it.size||'')!==normSize(row.size||''))return false;
     return _shipNameFuzzyMatch(it,row);
   });
@@ -2174,7 +2182,7 @@ function _shipListPickerBody(){
     '</div>';
   }).join('');
   var btnStyle=cnt===0?'width:100%;background:#9ca3af;cursor:not-allowed;margin-top:8px;':'width:100%;background:#0d9488;margin-top:8px;';
-  return '<div style="font-size:12px;color:#6b7280;margin-bottom:10px;">크림 앱의 <b>발송완료 목록</b> 화면을 캡처해서 올리면 보관번호·품번·사이즈·송장번호를 한번에 인식해서 보유중 재고와 매칭해요. 목록이 길면 스크롤해서 여러 장 올려도 됩니다.</div>'+
+  return '<div style="font-size:12px;color:#6b7280;margin-bottom:10px;">크림 앱의 <b>발송완료 목록</b> 화면을 캡처해서 올리면 보관번호·품번·사이즈·송장번호를 한번에 인식해서 보유중·발송완료 재고와 매칭해요. 보유중 항목은 발송완료로 전환, 이미 발송완료인 항목은 보관번호·송장번호만 채워요. 목록이 길면 스크롤해서 여러 장 올려도 됩니다.</div>'+
     '<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">'+
       '<span style="font-size:13px;font-weight:600;">이미지</span>'+
       '<span id="_shipListImgCnt" style="font-size:12px;color:#6b7280;">'+cnt+'/5장</span>'+
@@ -2292,9 +2300,12 @@ function _shipListMatchRowHtml(i,tier){
     : (r.approved
         ? '<button type="button" onclick="unapproveShipListRow('+i+')" style="background:#fde68a;color:#92400e;border:none;border-radius:6px;padding:5px 10px;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0;white-space:nowrap;">취소</button>'
         : '<button type="button" onclick="approveShipListRow('+i+')" style="background:#16a34a;color:#fff;border:none;border-radius:6px;padding:5px 10px;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0;white-space:nowrap;">승인</button>');
+  var actionBadge=it.status==='발송완료'
+    ? '<span style="font-size:10px;font-weight:700;color:#2563eb;background:#dbeafe;border-radius:4px;padding:1px 5px;margin-left:6px;white-space:nowrap;">번호만 채움 (이미 발송완료)</span>'
+    : '<span style="font-size:10px;font-weight:700;color:#16a34a;background:#dcfce7;border-radius:4px;padding:1px 5px;margin-left:6px;white-space:nowrap;">상태전환 (보유중→발송완료)</span>';
   return '<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #f0f0f0;">'+
     '<span style="flex:1;min-width:0;">'+
-      '<b>'+_esc(dedupeName(it.name,it.brand))+(it.size?' ('+_esc(it.size)+')':'')+'</b>'+
+      '<b>'+_esc(dedupeName(it.name,it.brand))+(it.size?' ('+_esc(it.size)+')':'')+'</b>'+actionBadge+
       '<div style="font-size:11px;color:#6b7280;margin-top:2px;">보관번호: <b style="color:#374151;">'+_esc(r.storage_no||'-')+'</b> · 송장번호: <b style="color:#374151;">'+_esc(r.tracking_no||'-')+'</b></div>'+
       (tier===2?'<div style="font-size:11px;color:#92400e;margin-top:2px;">인식된 상품명: '+_esc(r.name||'-')+'</div>':'')+
     '</span>'+actionBtn+
@@ -2338,7 +2349,7 @@ function _shipListReviewBody(feedback){
       '<div style="max-height:150px;overflow-y:auto;margin-bottom:10px;background:#fef2f2;border-radius:8px;">'+redHtml+'</div>':'<div style="margin-bottom:10px;"></div>')+
     '<div style="display:flex;gap:8px;">'+
       '<button type="button" class="sb" style="flex:1;background:#6b7280;" onclick="_shipListPickerMode=true;_shipListRows=[];_renderShipScanModal()">다시 스캔</button>'+
-      (totalInclude?'<button type="button" class="sb" style="flex:2;background:#ef4444;" onclick="confirmShipListDispatch()">📦 발송완료 처리 ('+totalInclude+'개)</button>':'')+
+      (totalInclude?'<button type="button" class="sb" style="flex:2;background:#ef4444;" onclick="confirmShipListDispatch()">📦 처리하기 ('+totalInclude+'개)</button>':'')+
     '</div>';
 }
 
@@ -2353,10 +2364,14 @@ async function confirmShipListDispatch(){
   if(!toApply.length){alert('발송완료 처리할 항목이 없습니다.');return;}
   if(!sb){alert('설정 탭에서 Supabase 키를 먼저 입력해주세요.');return;}
   var leftoverCnt=_shipListRows.length-toApply.length;
-  if(!confirm(toApply.length+'개 항목을 발송완료 처리할까요?\n(보관번호·송장번호가 함께 저장됩니다)'))return;
+  var convertCnt=toApply.filter(function(r){return r.matched.status==='보유중';}).length;
+  var fillCnt=toApply.length-convertCnt;
+  if(!confirm(toApply.length+'개 항목을 처리할까요?\n(상태전환 '+convertCnt+'개 · 번호만 채움 '+fillCnt+'개)\n보관번호·송장번호가 함께 저장됩니다'))return;
   try{
     var results=await Promise.all(toApply.map(function(r){
-      return sb.from('items').update({status:'발송완료',storage_no:r.storage_no||null,tracking_no:r.tracking_no||null}).eq('id',r.matched.id);
+      var upd={storage_no:r.storage_no||null,tracking_no:r.tracking_no||null};
+      if(r.matched.status==='보유중')upd.status='발송완료';
+      return sb.from('items').update(upd).eq('id',r.matched.id);
     }));
     var err=results.find(function(res){return res.error;});
     if(err){alert('오류: '+err.error.message);return;}
@@ -2365,7 +2380,7 @@ async function confirmShipListDispatch(){
     _shipListPendingImages=[];
     _shipMode='single';
     document.getElementById('shipScanModal').style.display='none';
-    alert(cnt+'개를 발송완료 처리했습니다!'+(leftoverCnt?'\n나머지 '+leftoverCnt+'개는 반영되지 않았어요 — 확인 후 처리해주세요.':''));
+    alert(cnt+'개를 처리했습니다! (상태전환 '+convertCnt+'개 · 번호만 채움 '+fillCnt+'개)'+(leftoverCnt?'\n나머지 '+leftoverCnt+'개는 반영되지 않았어요 — 확인 후 처리해주세요.':''));
     load();
   }catch(e){alert('발송 처리 오류: '+e.message);}
 }
