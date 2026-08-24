@@ -176,9 +176,13 @@ button.dfb.on{background:#1a1a1a;color:#fff;border-color:#1a1a1a;}
       <div class="stat"><div class="sl">보유 중인 수량</div><div class="sv" id="h1">-</div></div>
       <div class="stat"><div class="sl">이번달 수익</div><div class="sv" id="h2">-</div></div>
     </div>
-    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:16px;">
+    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:12px;">
       <div class="stat"><div class="sl">오늘 매출</div><div class="sv" id="h3">-</div></div>
       <div class="stat"><div class="sl">오늘 매입</div><div class="sv" id="h4">-</div></div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:16px;">
+      <div class="stat"><div class="sl">이번달 매출</div><div class="sv" id="h5">-</div></div>
+      <div class="stat"><div class="sl">이번달 매입</div><div class="sv" id="h6">-</div></div>
     </div>
     <div class="search-wrap">
       <input class="search-input" type="text" id="searchInput" placeholder="상품명, 브랜드, 품번, 사이즈, 보관번호, 송장번호로 검색..." oninput="searchQ=this.value;render()">
@@ -863,7 +867,13 @@ async function load(){
   var todaySales=items.filter(function(i){return i.status==='판매완료'&&(i.sold_quantity||0)>0&&i.sell_date===today;}).reduce(function(s,i){
     return s+(i.sell_price||0)*(i.sold_quantity||0);
   },0);
-  var todayBuy=items.filter(function(i){return i.buy_date===today;}).reduce(function(s,i){
+  var todayBuy=items.filter(function(i){return i.buy_date===today&&i.status!=='취소/환불';}).reduce(function(s,i){
+    return s+(i.buy_price||0)*(i.quantity||1);
+  },0);
+  var monthSales=items.filter(function(i){return i.status==='판매완료'&&(i.sold_quantity||0)>0&&i.sell_date&&i.sell_date.startsWith(mm);}).reduce(function(s,i){
+    return s+(i.sell_price||0)*(i.sold_quantity||0);
+  },0);
+  var monthBuy=items.filter(function(i){return i.buy_date&&i.buy_date.startsWith(mm)&&i.status!=='취소/환불';}).reduce(function(s,i){
     return s+(i.buy_price||0)*(i.quantity||1);
   },0);
 
@@ -874,6 +884,8 @@ async function load(){
   pe.className='sv '+(profit>=0?'g':'r');
   document.getElementById('h3').textContent=todaySales>0?todaySales.toLocaleString()+'원':'0원';
   document.getElementById('h4').textContent=todayBuy>0?todayBuy.toLocaleString()+'원':'0원';
+  document.getElementById('h5').textContent=monthSales>0?monthSales.toLocaleString()+'원':'0원';
+  document.getElementById('h6').textContent=monthBuy>0?monthBuy.toLocaleString()+'원':'0원';
   syncSourceDropdown();
   render();
   analysisData=items;
