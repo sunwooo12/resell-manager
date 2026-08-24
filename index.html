@@ -257,6 +257,18 @@ button.dfb.on{background:#1a1a1a;color:#fff;border-color:#1a1a1a;}
       <button class="cb" style="margin-top:12px;width:100%;" onclick="closeScanModal()">닫기</button>
     </div>
   </div>
+
+  <!-- 판매완료 처리 모달 -->
+  <div id="sellCompleteModal" class="modal-bg" style="display:none;" onclick="if(event.target===this)closeSellCompleteModal()">
+    <div class="modal-box">
+      <div class="modal-title">💰 판매완료 처리</div>
+      <div id="sellCompleteBody" style="font-size:13px;line-height:1.7;"></div>
+      <div style="display:flex;gap:8px;margin-top:16px;">
+        <button class="btnP" style="flex:1;" onclick="confirmSellComplete()">확인</button>
+        <button class="cb" style="flex:1;" onclick="closeSellCompleteModal()">취소</button>
+      </div>
+    </div>
+  </div>
   <input type="file" id="scanFile"       accept="image/*" capture="environment" style="display:none;" onchange="runIncomingScan(this)">
   <input type="file" id="scanFilePicker" accept="image/*" style="display:none;" onchange="runIncomingScan(this)">
   <input type="file" id="orderFile"      accept="image/*" multiple style="display:none;" onchange="runOrderScan(this)">
@@ -1105,7 +1117,7 @@ function selOpts(opts,cur){
   return opts.map(function(o){return '<option'+(o===cur?' selected':'')+'>'+o+'</option>';}).join('');
 }
 
-function calcEditPreview(id,buyPrice,sq){
+function calcEditPreview(id,buyPrice,origSq){
   var bpInput=document.getElementById('ep'+id);
   if(bpInput)buyPrice=parseInt(bpInput.value)||0;
   var sp=parseInt(document.getElementById('esp'+id).value)||0;
@@ -1118,7 +1130,10 @@ function calcEditPreview(id,buyPrice,sq){
     el.innerHTML='<div style="font-size:13px;color:#888;">매입가를 입력하면 순수익을 계산할 수 있어요</div>';
     return;
   }
-  var useSq=sq||1;
+  // 저장 시(updateItem)와 동일한 규칙: 이미 판매 이력이 있으면 그 수량, 없으면 현재 "수량" 입력값 전체
+  var qtyInput=document.getElementById('eq'+id);
+  var liveQty=qtyInput?parseInt(qtyInput.value)||1:1;
+  var useSq=origSq>0?origSq:liveQty;
   var fee=sp>0&&st>0?sp*useSq-st:0;
   var profit=st>0?st-(buyPrice||0)*useSq:sp*useSq-(buyPrice||0)*useSq;
   var cost=(buyPrice||0)*useSq;
@@ -1312,9 +1327,8 @@ function card(it,batchNum,totalBatches){
           '<button class="btnD" onclick="del(\''+it.id+'\')">삭제</button>';
     inlineForm+=sellForm;
   }else if(it.status==='판매완료'&&remain>0){
-    acts+='<button class="btnP" onclick="tog(\''+sellKey+'\')">추가 판매</button>';
+    acts+='<button class="btnP" onclick="openSellCompleteModal(\''+it.id+'\')">💰 판매완료</button>';
     acts+='<button class="btnD" onclick="del(\''+it.id+'\')">삭제</button>';
-    inlineForm+=sellForm;
   }else{
     acts+='<button class="btnD" onclick="del(\''+it.id+'\')">삭제</button>';
   }
@@ -1331,7 +1345,7 @@ function card(it,batchNum,totalBatches){
   }else if(it.status==='판매대기'){
     qaNext='<button class="qa-btn qa-primary" onclick="event.stopPropagation();tog(\''+sellKey+'\')" title="판매 확정">💰 판매완료</button>';
   }else if(it.status==='판매완료'&&remain>0){
-    qaNext='<button class="qa-btn qa-primary" onclick="event.stopPropagation();tog(\''+sellKey+'\')" title="추가 판매">💰 추가판매</button>';
+    qaNext='<button class="qa-btn qa-primary" onclick="event.stopPropagation();openSellCompleteModal(\''+it.id+'\')" title="판매완료">💰 판매완료</button>';
   }
   var quickActs='<span class="qa-group">'+
     '<button class="qa-btn" onclick="event.stopPropagation();tog(\''+ekey+'\')" title="수정">✏️</button>'+
@@ -3673,31 +3687,27 @@ function computeFee(sellPrice,soldQty,settleTotal){
   return settleTotal>0?sellPrice*soldQty-settleTotal:0;
 }
 
-async function confSell(id,maxRemain){
-  var sellQty=parseInt(document.getElementById('sq'+id).value)||maxRemain;
-  var sp=parseInt(document.getElementById('sp'+id).value);
-  var st=parseInt(document.getElementById('st'+id).value)||0;
-  var sd=document.getElementById('sd'+id).value||new Date().toISOString().split('T')[0];
-  if(!sp){alert('판매가를 입력해주세요.');return;}
-  if(sellQty<1||sellQty>maxRemain){alert('판매 수량을 확인해주세요.');return;}
-
+// 판매 확정의 실제 DB 반영 로직 (공용). id 항목에서 sellQty만큼을 sp(개당 판매가)/st(정산금액 합계)/sd(판매일)로 판매완료 처리한다.
+// 판매 이벤트마다 독립된 row(sell_date/sell_price/fee)를 갖게 되어, 부분판매를 여러 번 해도
+// 이전에 이미 집계된 판매분의 순수익이 최신 판매일로 재귀속(월별 집계 중복)되지 않는다.
+async function performSell(id,sellQty,sp,st,sd){
   var item=items.find(function(i){return i.id==id;});
+  if(!item)return{error:'항목을 찾을 수 없습니다.'};
   var prevSold=item.sold_quantity||0;
   var totalQty=item.quantity||1;
+  var maxRemain=totalQty-prevSold;
+  if(!sp)return{error:'판매가를 입력해주세요.'};
+  if(sellQty<1||sellQty>maxRemain)return{error:'판매 수량을 확인해주세요.'};
 
   if(prevSold===0&&sellQty===totalQty){
-    // 이 row가 이번 한 번의 판매로 전부 소진되는 경우: 분리 없이 그대로 확정 (기존 동작과 동일)
+    // 이 row가 이번 한 번의 판매로 전부 소진되는 경우: 분리 없이 그대로 확정
     var res=await sb.from('items').update({
       status:'판매완료',sell_price:sp,fee:computeFee(sp,sellQty,st),sell_date:sd,sold_quantity:sellQty
     }).eq('id',id);
-    if(res.error){alert('오류: '+res.error.message);return;}
-    oid=null;load();
-    return;
+    return res.error?{error:'오류: '+res.error.message}:{};
   }
 
   // 부분판매(또는 이미 판매 이력이 섞여 있는 row에 대한 추가판매): 판매되는 수량만 새 row로 분리한다.
-  // 판매 이벤트마다 독립된 sell_date/sell_price/fee를 가지게 되어, 부분판매를 여러 번 해도
-  // 이전에 이미 집계된 판매분의 순수익이 최신 판매일로 재귀속(월별 집계 중복)되지 않는다.
   var ins=await sb.from('items').insert([{
     name:item.name,brand:item.brand,category:item.category,size:item.size,
     product_code:item.product_code,source:item.source,platform:item.platform,
@@ -3706,11 +3716,72 @@ async function confSell(id,maxRemain){
     sell_price:sp,fee:computeFee(sp,sellQty,st),sell_date:sd,
     status:'판매완료'
   }]);
-  if(ins.error){alert('오류: '+ins.error.message);return;}
+  if(ins.error)return{error:'오류: '+ins.error.message};
 
   // 원본 row는 남은(미판매) 수량만 유지 — 판매 이력이 이미 섞여 있었다면 그 필드는 건드리지 않고 그대로 둔다
   var upd=await sb.from('items').update({quantity:totalQty-sellQty}).eq('id',id);
-  if(upd.error){alert('오류: '+upd.error.message);return;}
+  return upd.error?{error:'오류: '+upd.error.message}:{};
+}
+
+async function confSell(id,maxRemain){
+  var sellQty=parseInt(document.getElementById('sq'+id).value)||maxRemain;
+  var sp=parseInt(document.getElementById('sp'+id).value);
+  var st=parseInt(document.getElementById('st'+id).value)||0;
+  var sd=document.getElementById('sd'+id).value||new Date().toISOString().split('T')[0];
+  var r=await performSell(id,sellQty,sp,st,sd);
+  if(r.error){alert(r.error);return;}
+  oid=null;load();
+}
+
+// ── 판매완료 처리 모달 (판매완료 && 잔여수량 있는 항목에서 "💰 판매완료" 버튼) ──
+// 클릭 한 번당 정확히 1개만 새 row로 분리해 판매완료 처리한다. 같은 품번을 여러 번 팔아도
+// 매번 독립된 row로 기록되므로 중복 집계 없이 각 판매 건이 따로 남는다.
+var _sellCompleteId=null;
+function openSellCompleteModal(id){
+  _sellCompleteId=id;
+  var today=new Date().toISOString().split('T')[0];
+  var s='padding:7px 10px;border:1px solid #e2e0da;border-radius:8px;font-size:13px;width:100%;font-family:\'Noto Sans KR\',sans-serif;background:#fff;';
+  document.getElementById('sellCompleteBody').innerHTML=
+    '<div style="margin-bottom:10px;"><div class="il">판매가 (개당)</div><input type="number" id="_sc_sp" placeholder="200000" style="'+s+'" oninput="_scCalc()"></div>'+
+    '<div style="margin-bottom:10px;"><div class="il">정산금액 (합계)</div><input type="number" id="_sc_st" placeholder="190000" style="'+s+'" oninput="_scCalc()"></div>'+
+    '<div style="margin-bottom:10px;"><div class="il">판매일</div><input type="date" id="_sc_sd" value="'+today+'" style="'+s+'"></div>'+
+    '<div id="_scPrev" style="display:none;background:#f8f9fa;border-radius:8px;padding:10px 14px;gap:16px;align-items:center;flex-wrap:wrap;"></div>';
+  document.getElementById('sellCompleteModal').style.display='flex';
+  setTimeout(function(){var el=document.getElementById('_sc_sp');if(el)el.focus();},50);
+}
+function closeSellCompleteModal(){
+  document.getElementById('sellCompleteModal').style.display='none';
+  _sellCompleteId=null;
+}
+function _scCalc(){
+  var item=items.find(function(i){return i.id==_sellCompleteId;});
+  var el=document.getElementById('_scPrev');
+  if(!item||!el)return;
+  var sp=parseInt((document.getElementById('_sc_sp')||{}).value)||0;
+  var st=parseInt((document.getElementById('_sc_st')||{}).value)||0;
+  if(!sp&&!st){el.style.display='none';return;}
+  var bp=item.buy_price||0;
+  if(!bp){el.style.display='flex';el.innerHTML='<div style="font-size:13px;color:#888;">매입가를 입력하면 순수익을 계산할 수 있어요</div>';return;}
+  var fee=sp>0&&st>0?sp-st:0;
+  var profit=st>0?st-bp:sp-bp;
+  var rate=bp>0?Math.round(profit/bp*100):0;
+  var gc=profit>=0?'#16a34a':'#dc2626';
+  el.style.display='flex';
+  el.innerHTML=
+    (sp>0&&st>0?'<div><div style="font-size:11px;color:#888;margin-bottom:3px;">수수료</div><div style="font-size:14px;font-weight:700;color:#888;">'+fee.toLocaleString()+'원</div></div><div style="width:1px;background:#e2e0da;align-self:stretch;"></div>':'')+
+    '<div><div style="font-size:11px;color:#888;margin-bottom:3px;">순수익</div><div style="font-size:14px;font-weight:700;color:'+gc+';">'+(profit>=0?'+':'')+profit.toLocaleString()+'원</div></div>'+
+    '<div style="width:1px;background:#e2e0da;align-self:stretch;"></div>'+
+    '<div><div style="font-size:11px;color:#888;margin-bottom:3px;">마진율</div><div style="font-size:14px;font-weight:700;color:'+gc+';">'+(rate>=0?'+':'')+rate+'%</div></div>';
+}
+async function confirmSellComplete(){
+  var id=_sellCompleteId;
+  if(!id)return;
+  var sp=parseInt((document.getElementById('_sc_sp')||{}).value)||0;
+  var st=parseInt((document.getElementById('_sc_st')||{}).value)||0;
+  var sd=(document.getElementById('_sc_sd')||{}).value||new Date().toISOString().split('T')[0];
+  var r=await performSell(id,1,sp,st,sd);
+  if(r.error){alert(r.error);return;}
+  closeSellCompleteModal();
   oid=null;load();
 }
 
@@ -3781,8 +3852,6 @@ async function updateItem(id){
   if(!name||!price||!date){alert('상품명, 매입가, 매입일은 필수예요!');return;}
   var item=items.find(function(i){return i.id==id;});
   var origSq=item?item.sold_quantity||0:0;
-  var origSellPrice=item?item.sell_price||0:0;
-  var origSettle=origSellPrice*origSq-(item?item.fee||0:0);
   var updateData={
     name:name,brand:brand,category:category,size:size,product_code:productCode,
     source:source,buy_price:price,quantity:qty,buy_date:date,note:note,order_url:orderUrl,
@@ -3792,56 +3861,57 @@ async function updateItem(id){
   var storageDate=platform==='크림(보관)'?(document.getElementById('esd2'+id)||{}).value||null:null;
   var shippingCost=parseInt(document.getElementById('esc'+id).value)||0;
   var otherCost=parseInt(document.getElementById('eoc'+id).value)||0;
-  // 판매가·정산금액이 실제로 바뀐 경우에만 덮어쓰기
-  if(sellDate){updateData.sell_date=sellDate;}
-  if(sellPrice>0){
-    updateData.sell_price=sellPrice;
-    if(sellPrice!==origSellPrice||settle!==origSettle){
-      updateData.fee=computeFee(sellPrice,origSq,settle);
-    }
-  }
   if(platform){updateData.platform=platform;}
   updateData.storage_date=storageDate;
   updateData.shipping_cost=shippingCost;
   updateData.other_cost=otherCost;
-  var newStatus=document.getElementById('est2'+id).value;
-  if(newStatus){updateData.status=newStatus;}
-  // 상태 변경 시 해당 상태에 맞지 않는 필드 자동 정리
-  if(newStatus){
-    var preShip=['주문완료','보유중'];
-    var prePending=['주문완료','보유중','발송완료'];
-    if(preShip.indexOf(newStatus)!==-1){
-      // 발송 전 상태: 플랫폼·입고일·판매대기시작일·배송비 초기화
-      updateData.platform=null;
-      updateData.storage_date=null;
-      updateData.storage_start_date=null;
-      updateData.shipping_cost=0;
-      // 판매 정보 초기화 (판매대기/판매완료 이전 상태로 되돌릴 때)
-      updateData.sold_quantity=0;
-      updateData.sell_price=null;
-      updateData.fee=0;
-      updateData.sell_date=null;
-      updateData.shipped_date=null;
-    } else if(prePending.indexOf(newStatus)!==-1){
-      // 발송완료: 판매대기 시작일만 초기화 + 발송완료로 새로 전환된 경우 발송일 기록
-      updateData.storage_start_date=null;
-      if(newStatus==='발송완료'&&item&&item.status!=='발송완료'){
-        updateData.shipped_date=new Date().toISOString().split('T')[0];
+
+  // 판매가 또는 정산금액이 입력돼 있으면(신규 입력이든 기존 값 유지든) 그 항목을 판매완료로 확정한다.
+  // 이미 판매 이력이 있는 row(origSq>0)는 그 판매수량 기준으로 정산을 다시 맞추고,
+  // 아직 안 판 row(origSq===0)는 현재 "수량" 전체를 이번에 판매한 것으로 처리한다.
+  var saleInput=sellPrice>0||settle>0;
+  if(saleInput){
+    var saleQty=origSq>0?origSq:qty;
+    updateData.sell_price=sellPrice;
+    updateData.sold_quantity=saleQty;
+    updateData.fee=computeFee(sellPrice,saleQty,settle);
+    updateData.sell_date=sellDate||new Date().toISOString().split('T')[0];
+    updateData.status='판매완료';
+  }else{
+    var newStatus=document.getElementById('est2'+id).value;
+    if(newStatus){updateData.status=newStatus;}
+    // 상태 변경 시 해당 상태에 맞지 않는 필드 자동 정리
+    if(newStatus){
+      var preShip=['주문완료','보유중'];
+      var prePending=['주문완료','보유중','발송완료'];
+      if(preShip.indexOf(newStatus)!==-1){
+        // 발송 전 상태: 플랫폼·입고일·판매대기시작일·배송비 초기화
+        updateData.platform=null;
+        updateData.storage_date=null;
+        updateData.storage_start_date=null;
+        updateData.shipping_cost=0;
+        // 판매 정보 초기화 (판매대기/판매완료 이전 상태로 되돌릴 때)
+        updateData.sold_quantity=0;
+        updateData.sell_price=null;
+        updateData.fee=0;
+        updateData.sell_date=null;
+        updateData.shipped_date=null;
+      } else if(prePending.indexOf(newStatus)!==-1){
+        // 발송완료: 판매대기 시작일만 초기화 + 발송완료로 새로 전환된 경우 발송일 기록
+        updateData.storage_start_date=null;
+        if(newStatus==='발송완료'&&item&&item.status!=='발송완료'){
+          updateData.shipped_date=new Date().toISOString().split('T')[0];
+        }
       }
     }
-  }
-  // 판매가·정산금액 모두 지우면 판매 취소로 간주 → 보유중 복귀 + 판매 정보 초기화
-  if(item&&item.status==='판매완료'&&!sellPrice&&!settle){
-    updateData.status='보유중';
-    updateData.sell_price=null;
-    updateData.sell_date=null;
-    updateData.fee=0;
-    updateData.sold_quantity=0;
-  }
-  // 판매완료인데 판매일이 비어 있으면(신규 입력도, 기존 값도 없음) 오늘 날짜로 자동 채움 → 수익 집계 누락 방지
-  var finalStatus=updateData.status||(item?item.status:null);
-  if(finalStatus==='판매완료'&&updateData.sell_date===undefined&&!(item&&item.sell_date)){
-    updateData.sell_date=new Date().toISOString().split('T')[0];
+    // 판매가·정산금액을 모두 비워서 저장하면 판매 취소로 간주 → 보유중 복귀 + 판매 정보 초기화
+    if(item&&item.status==='판매완료'){
+      updateData.status='보유중';
+      updateData.sell_price=null;
+      updateData.sell_date=null;
+      updateData.fee=0;
+      updateData.sold_quantity=0;
+    }
   }
   var res=await sb.from('items').update(updateData).eq('id',id);
   if(res.error){alert('오류: '+res.error.message);return;}
