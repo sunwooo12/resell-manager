@@ -1965,6 +1965,7 @@ async function _runScanFiles(files){
 var _shipBox=[];
 var _shipMode='single';
 var _shipListPendingImages=[],_shipListPickerMode=false,_shipListRows=[],_shipListManualUI=null;
+var _shipListBulkTracking='',_shipListBulkOverwrite=false;
 
 function findHeldForDispatch(codes){
   var ncs=codes.map(normCode);
@@ -2037,6 +2038,8 @@ function openShipScanModal(){
   _shipListPickerMode=false;
   _shipListRows=[];
   _shipListManualUI=null;
+  _shipListBulkTracking='';
+  _shipListBulkOverwrite=false;
   document.getElementById('shipScanModal').style.display='flex';
   _renderShipScanModal();
 }
@@ -2053,6 +2056,8 @@ function closeShipScanModal(){
   _shipListPickerMode=false;
   _shipListRows=[];
   _shipListManualUI=null;
+  _shipListBulkTracking='';
+  _shipListBulkOverwrite=false;
   document.getElementById('shipScanModal').style.display='none';
 }
 
@@ -2330,6 +2335,8 @@ function findHeldCodeInNameMatch(row,usedIds){
 
 function _buildShipListRows(rows){
   _shipListManualUI=null;
+  _shipListBulkTracking='';
+  _shipListBulkOverwrite=false;
   var usedIds=[];
   _shipListRows=rows.map(function(r){
     var row={
@@ -2541,7 +2548,7 @@ function _shipListManualLinkBody(){
   var st=_shipListManualUI;
   var r=_shipListRows[st.rowIndex];
   return '<div style="font-weight:700;margin-bottom:8px;">"'+_esc(r.name||r.product_no||'(상품명 미인식)')+'" 연결할 재고 선택</div>'+
-    '<div style="font-size:11px;color:#9ca3af;margin-bottom:8px;">보관번호: '+_esc(r.storage_no||'-')+' · 송장번호: '+_esc(r.tracking_no||'-')+
+    '<div style="font-size:11px;color:#9ca3af;margin-bottom:8px;word-break:break-all;">보관번호: '+_esc(r.storage_no||'-')+' · 송장번호: '+_esc(r.tracking_no||'-')+
       (r.product_no?' · 인식 품번: '+_esc(r.product_no):'')+(r.size?' · 인식 사이즈: '+_esc(r.size):'')+'</div>'+
     '<input id="_shipListManualLinkQuery" type="text" placeholder="상품명 또는 품번으로 검색" value="'+_esc(st.query||'')+'" '+
       'oninput="_shipListManualUI.query=this.value;_updateShipListManualLinkResults();" '+
@@ -2574,7 +2581,7 @@ function _shipListManualRegisterBody(){
       '<div><div style="'+lStyle+'">사이즈</div><input id="_shipRegSize" value="'+_esc(d.size)+'" style="'+iStyle+'"></div>'+
     '</div>'+
     '<div style="margin-bottom:8px;"><div style="'+lStyle+'">매입가 (원, 선택)</div><input id="_shipRegPrice" type="number" min="0" value="'+_esc(d.buy_price||'')+'" placeholder="비워두면 나중에 입력" style="'+iStyle+'"></div>'+
-    '<div style="font-size:11px;color:#9ca3af;margin-bottom:10px;">보관번호: '+_esc(r.storage_no||'-')+' · 송장번호: '+_esc(r.tracking_no||'-')+'</div>'+
+    '<div style="font-size:11px;color:#9ca3af;margin-bottom:10px;word-break:break-all;">보관번호: '+_esc(r.storage_no||'-')+' · 송장번호: '+_esc(r.tracking_no||'-')+'</div>'+
     '<div style="display:flex;gap:8px;">'+
       '<button type="button" class="sb" style="flex:1;background:#6b7280;" onclick="closeShipListManualUI()">취소</button>'+
       '<button type="button" class="sb" style="flex:2;" onclick="confirmShipListManualRegister()">이 정보로 등록 예약</button>'+
@@ -2603,7 +2610,7 @@ function _shipListManualRowHtml(i){
       '<span style="flex:1;min-width:0;">'+
         '<b>'+_esc(d.name)+(d.size?' ('+_esc(d.size)+')':'')+'</b>'+
         '<span style="font-size:10px;font-weight:700;color:#7c3aed;background:#ede9fe;border-radius:4px;padding:1px 5px;margin-left:6px;white-space:nowrap;">새로 등록</span>'+
-        '<div style="font-size:11px;color:#6b7280;margin-top:2px;">'+(d.product_code?_esc(d.product_code)+' · ':'')+
+        '<div style="font-size:11px;color:#6b7280;margin-top:2px;word-break:break-all;">'+(d.product_code?_esc(d.product_code)+' · ':'')+
           '보관번호: <b style="color:#374151;">'+_esc(r.storage_no||'-')+'</b> · 송장번호: <b style="color:#374151;">'+_esc(r.tracking_no||'-')+'</b></div>'+
       '</span>'+
       '<button type="button" onclick="cancelShipListManual('+i+')" title="취소" style="background:none;border:none;cursor:pointer;font-size:20px;color:#9ca3af;line-height:1;flex-shrink:0;padding:0 4px;">×</button>'+
@@ -2616,7 +2623,7 @@ function _shipListManualRowHtml(i){
   return '<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #f0f0f0;">'+
     '<span style="flex:1;min-width:0;">'+
       '<b>'+_esc(dedupeName(it.name,it.brand))+(it.size?' ('+_esc(it.size)+')':'')+'</b>'+actionBadge+
-      '<div style="font-size:11px;color:#6b7280;margin-top:2px;">보관번호: <b style="color:#374151;">'+_esc(r.storage_no||'-')+'</b> · 송장번호: <b style="color:#374151;">'+_esc(r.tracking_no||'-')+'</b></div>'+
+      '<div style="font-size:11px;color:#6b7280;margin-top:2px;word-break:break-all;">보관번호: <b style="color:#374151;">'+_esc(r.storage_no||'-')+'</b> · 송장번호: <b style="color:#374151;">'+_esc(r.tracking_no||'-')+'</b></div>'+
     '</span>'+
     '<button type="button" onclick="cancelShipListManual('+i+')" title="취소" style="background:none;border:none;cursor:pointer;font-size:20px;color:#9ca3af;line-height:1;flex-shrink:0;padding:0 4px;">×</button>'+
   '</div>';
@@ -2647,10 +2654,47 @@ function _shipListMatchRowHtml(i,tier){
   return '<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #f0f0f0;">'+
     '<span style="flex:1;min-width:0;">'+
       '<b>'+_esc(dedupeName(it.name,it.brand))+(it.size?' ('+_esc(it.size)+')':'')+'</b>'+actionBadge+
-      '<div style="font-size:11px;color:#6b7280;margin-top:2px;">보관번호: <b style="color:#374151;">'+_esc(r.storage_no||'-')+'</b> · 송장번호: <b style="color:#374151;">'+_esc(r.tracking_no||'-')+'</b></div>'+
+      '<div style="font-size:11px;color:#6b7280;margin-top:2px;word-break:break-all;">보관번호: <b style="color:#374151;">'+_esc(r.storage_no||'-')+'</b> · 송장번호: <b style="color:#374151;">'+_esc(r.tracking_no||'-')+'</b></div>'+
       reasonNote+
     '</span>'+actionBtn+
   '</div>';
+}
+
+function _shipListBulkTrackingBarHtml(scopeCnt){
+  var val=_esc(_shipListBulkTracking||'');
+  var checked=_shipListBulkOverwrite?' checked':'';
+  return '<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:10px;margin-bottom:10px;">'+
+    '<div style="font-size:12px;font-weight:700;color:#1d4ed8;margin-bottom:6px;">🔖 송장번호 일괄입력 <span style="font-weight:400;color:#6b7280;">— 묶음발송이면 한 번에 채우세요</span></div>'+
+    '<div style="display:flex;gap:6px;">'+
+      '<input id="_shipListBulkTrackingInput" type="text" inputmode="numeric" placeholder="송장번호 입력" value="'+val+'" '+
+        'oninput="_shipListBulkTracking=this.value;" '+
+        'onkeydown="if(event.key===\'Enter\'){event.preventDefault();applyShipListBulkTracking();}" '+
+        'style="flex:1;min-width:0;padding:8px 9px;border:1.5px solid #3b82f6;border-radius:6px;font-size:13px;font-family:monospace;box-sizing:border-box;">'+
+      '<button type="button" onclick="applyShipListBulkTracking()" style="background:#2563eb;color:#fff;border:none;border-radius:6px;padding:0 14px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;flex-shrink:0;">전체 적용</button>'+
+    '</div>'+
+    '<label style="display:flex;align-items:center;gap:5px;margin-top:6px;font-size:11.5px;color:#374151;cursor:pointer;">'+
+      '<input type="checkbox" id="_shipListBulkOverwriteChk"'+checked+' onchange="_shipListBulkOverwrite=this.checked;" style="margin:0;">'+
+      '전체 덮어쓰기 (체크 안 하면 인식된 번호는 그대로 두고 빈 항목만 채워요)'+
+    '</label>'+
+    '<div style="font-size:10.5px;color:#93a5c9;margin-top:4px;">적용 대상: 확실한 매칭 + 승인된 확인필요 항목 ('+scopeCnt+'개)</div>'+
+  '</div>';
+}
+
+function applyShipListBulkTracking(){
+  var val=(_shipListBulkTracking||'').trim();
+  if(!val){alert('송장번호를 입력해주세요.');return;}
+  var overwrite=!!_shipListBulkOverwrite;
+  var cnt=0;
+  _shipListRows.forEach(function(r){
+    var inScope=(r.matchTier===1&&!r.excluded)||(r.matchTier===2&&r.approved);
+    if(!inScope)return;
+    if(overwrite||!r.tracking_no){r.tracking_no=val;cnt++;}
+  });
+  if(!cnt){
+    _renderShipListModal(_shipFbWarn('적용된 항목이 없습니다. (확실한 매칭 또는 승인된 확인필요 항목만 대상이에요)'));
+    return;
+  }
+  _renderShipListModal(_shipFbOk('✅ 송장번호 "'+val+'" 을(를) '+cnt+'개 항목에 적용했습니다.'));
 }
 
 function _shipListReviewBody(feedback){
@@ -2674,7 +2718,7 @@ function _shipListReviewBody(feedback){
       '<div><span style="color:#dc2626;font-weight:700;">매칭 안 됨</span> — '+_esc(r.name||'(상품명 미인식)')+
       (r.product_no?' · 품번: '+_esc(r.product_no):'')+
       (r.size?' · 사이즈: '+_esc(r.size):'')+'</div>'+
-      '<div style="font-size:11px;color:#9ca3af;margin-top:2px;">보관번호: '+_esc(r.storage_no||'-')+' · 송장번호: '+_esc(r.tracking_no||'-')+'</div>'+
+      '<div style="font-size:11px;color:#9ca3af;margin-top:2px;word-break:break-all;">보관번호: '+_esc(r.storage_no||'-')+' · 송장번호: '+_esc(r.tracking_no||'-')+'</div>'+
       '<div style="display:flex;gap:6px;margin-top:6px;">'+
         '<button type="button" onclick="openShipListManualLink('+i+')" style="background:#3b82f6;color:#fff;border:none;border-radius:6px;padding:5px 10px;font-size:12px;font-weight:700;cursor:pointer;">🔗 직접 연결</button>'+
         '<button type="button" onclick="openShipListManualRegister('+i+')" style="background:#7c3aed;color:#fff;border:none;border-radius:6px;padding:5px 10px;font-size:12px;font-weight:700;cursor:pointer;">➕ 새로 등록</button>'+
@@ -2687,6 +2731,7 @@ function _shipListReviewBody(feedback){
   var totalInclude=includedGreen.length+includedYellow.length+manualIdx.length;
 
   return (feedback?'<div style="margin-bottom:10px;">'+feedback+'</div>':'')+
+    _shipListBulkTrackingBarHtml(includedGreen.length+includedYellow.length)+
     '<div style="font-weight:700;margin-bottom:8px;">인식 '+_shipListRows.length+'행 · <span style="color:#16a34a;">확실 '+greenIdx.length+'개</span> · <span style="color:#92400e;">확인필요 '+yellowIdx.length+'개</span> · <span style="color:#7c3aed;">직접처리 '+manualIdx.length+'개</span> · <span style="color:#dc2626;">매칭안됨 '+redIdx.length+'개</span></div>'+
     '<div style="font-size:12px;font-weight:600;color:#16a34a;margin-bottom:2px;">✅ 확실한 매칭 (품번+사이즈 일치)</div>'+
     '<div style="max-height:200px;overflow-y:auto;margin-bottom:2px;">'+greenHtml+'</div>'+
