@@ -453,6 +453,12 @@ ALTER TABLE items ADD COLUMN IF NOT EXISTS storage_start_date DATE;
 ALTER TABLE items ADD COLUMN IF NOT EXISTS shipping_cost INT DEFAULT 0;
 ALTER TABLE items ADD COLUMN IF NOT EXISTS other_cost INT DEFAULT 0;</div>
       </div>
+      <div style="margin-top:28px;padding-top:24px;border-top:1px solid #e2e0da;">
+        <div style="font-size:14px;font-weight:700;margin-bottom:6px;">데이터 점검 (추가판매 중복집계 버그)</div>
+        <div style="font-size:12px;color:#888;margin-bottom:8px;">"추가판매" 버튼으로 부분판매를 여러 번 한 항목 중, 월별 순수익 집계가 잘못됐을 수 있는 항목을 찾아 화면에만 표시합니다. 데이터는 수정하지 않습니다.</div>
+        <button class="sb" onclick="runSellDataAudit()">데이터 점검 실행</button>
+        <div id="auditResult" style="margin-top:14px;"></div>
+      </div>
     </div>
   </div>
 
@@ -838,12 +844,12 @@ async function load(){
   var now=new Date();
   var mm=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
   var today=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0');
-  var profit=items.filter(function(i){return i.status==='판매완료'&&i.sell_date&&i.sell_date.startsWith(mm)&&(i.buy_price||0)>0;}).reduce(function(s,i){
-    var sq=i.sold_quantity||i.quantity||1;
+  var profit=items.filter(function(i){return i.status==='판매완료'&&(i.sold_quantity||0)>0&&i.sell_date&&i.sell_date.startsWith(mm)&&(i.buy_price||0)>0;}).reduce(function(s,i){
+    var sq=i.sold_quantity||0;
     return s+(i.sell_price||0)*sq-(i.buy_price||0)*sq-(i.fee||0);
   },0);
-  var todaySales=items.filter(function(i){return i.status==='판매완료'&&i.sell_date===today;}).reduce(function(s,i){
-    return s+(i.sell_price||0)*(i.sold_quantity||i.quantity||1);
+  var todaySales=items.filter(function(i){return i.status==='판매완료'&&(i.sold_quantity||0)>0&&i.sell_date===today;}).reduce(function(s,i){
+    return s+(i.sell_price||0)*(i.sold_quantity||0);
   },0);
   var todayBuy=items.filter(function(i){return i.buy_date===today;}).reduce(function(s,i){
     return s+(i.buy_price||0)*(i.quantity||1);
@@ -3677,19 +3683,34 @@ async function confSell(id,maxRemain){
 
   var item=items.find(function(i){return i.id==id;});
   var prevSold=item.sold_quantity||0;
-  var newSold=prevSold+sellQty;
   var totalQty=item.quantity||1;
-  var newStatus=newSold>=totalQty?'판매완료':item.status;
 
-  // 이전 정산 합계 복원 후 이번 배치 합산 → SET (누적 +=  제거)
-  var prevSettle=(item.sell_price||0)*prevSold-(item.fee||0);
-  var totalSettle=prevSettle+st;
-  var newFee=computeFee(sp,newSold,totalSettle);
+  if(prevSold===0&&sellQty===totalQty){
+    // 이 row가 이번 한 번의 판매로 전부 소진되는 경우: 분리 없이 그대로 확정 (기존 동작과 동일)
+    var res=await sb.from('items').update({
+      status:'판매완료',sell_price:sp,fee:computeFee(sp,sellQty,st),sell_date:sd,sold_quantity:sellQty
+    }).eq('id',id);
+    if(res.error){alert('오류: '+res.error.message);return;}
+    oid=null;load();
+    return;
+  }
 
-  var res=await sb.from('items').update({
-    status:newStatus,sell_price:sp,fee:newFee,sell_date:sd,sold_quantity:newSold
-  }).eq('id',id);
-  if(res.error){alert('오류: '+res.error.message);return;}
+  // 부분판매(또는 이미 판매 이력이 섞여 있는 row에 대한 추가판매): 판매되는 수량만 새 row로 분리한다.
+  // 판매 이벤트마다 독립된 sell_date/sell_price/fee를 가지게 되어, 부분판매를 여러 번 해도
+  // 이전에 이미 집계된 판매분의 순수익이 최신 판매일로 재귀속(월별 집계 중복)되지 않는다.
+  var ins=await sb.from('items').insert([{
+    name:item.name,brand:item.brand,category:item.category,size:item.size,
+    product_code:item.product_code,source:item.source,platform:item.platform,
+    buy_price:item.buy_price,buy_date:item.buy_date,note:item.note,order_url:item.order_url,
+    quantity:sellQty,sold_quantity:sellQty,
+    sell_price:sp,fee:computeFee(sp,sellQty,st),sell_date:sd,
+    status:'판매완료'
+  }]);
+  if(ins.error){alert('오류: '+ins.error.message);return;}
+
+  // 원본 row는 남은(미판매) 수량만 유지 — 판매 이력이 이미 섞여 있었다면 그 필드는 건드리지 않고 그대로 둔다
+  var upd=await sb.from('items').update({quantity:totalQty-sellQty}).eq('id',id);
+  if(upd.error){alert('오류: '+upd.error.message);return;}
   oid=null;load();
 }
 
@@ -4110,6 +4131,69 @@ function renderTop5(its){
       '<td style="font-weight:700;'+pc+'">'+(it.profit>=0?'+':'')+it.profit.toLocaleString()+'원</td>'+
       '<td style="font-weight:600;'+pc+'">'+(it.rate>=0?'+':'')+it.rate+'%</td></tr>';
   }).join('');
+}
+
+// ── 데이터 점검: 추가판매 중복집계 버그로 잘못됐을 수 있는 항목 찾기 (읽기 전용, 수정하지 않음) ──
+async function runSellDataAudit(){
+  if(!sb){alert('설정 탭에서 Supabase 키를 먼저 입력해주세요.');return;}
+  var el=document.getElementById('auditResult');
+  el.innerHTML='<div style="color:#888;font-size:13px;">조회 중...</div>';
+  var res=await sb.from('items').select('*');
+  if(res.error){el.innerHTML='<div style="color:#dc2626;font-size:13px;">조회 실패: '+esc(res.error.message)+'</div>';return;}
+  var its=res.data||[];
+  var sold=its.filter(function(i){return i.status==='판매완료';});
+
+  function profitInfo(i){
+    var sq=i.sold_quantity||0;
+    var hasBp=(i.buy_price||0)>0;
+    var profit=hasBp?(i.sell_price||0)*sq-(i.buy_price||0)*sq-(i.fee||0):null;
+    var cost=(i.buy_price||0)*sq;
+    var rate=hasBp&&cost>0?Math.round(profit/cost*100):null;
+    return {sq:sq,profit:profit,rate:rate};
+  }
+
+  // A. 확실한 오류: 판매완료인데 아직 안 팔린 수량이 남아있음 (한 row에 판매 이력이 덮어써진 흔적)
+  var certain=sold.filter(function(i){return (i.quantity||1)>(i.sold_quantity||0);});
+  // B. 의심 사례: 수량 2개 이상인 row가 한 번에 다 팔린 것으로 마감됨 (여러 번의 부분판매가 합쳐졌을 수 있음)
+  var suspect=sold.filter(function(i){return (i.quantity||1)>1&&(i.sold_quantity||0)===(i.quantity||1);});
+  // C. 마진율 이상치: 매입가 대비 순수익이 150%를 넘는 항목 (중복 합산 시 나타나는 전형적 증상)
+  var outlier=sold.filter(function(i){
+    if((i.buy_price||0)<=0||!(i.sold_quantity>0))return false;
+    var pi=profitInfo(i);
+    return pi.rate!==null&&pi.rate>150;
+  });
+
+  function rowHtml(i,tag,tagColor){
+    var pi=profitInfo(i);
+    var label=(i.brand?i.brand+' ':'')+i.name+(i.size?' ('+i.size+')':'');
+    return '<div style="padding:10px 12px;border:1px solid #e2e0da;border-radius:8px;margin-bottom:6px;font-size:12px;">'+
+      '<div style="display:flex;justify-content:space-between;gap:8px;"><b>'+esc(label)+'</b>'+
+      '<span style="font-size:10px;font-weight:700;color:'+tagColor+';white-space:nowrap;">'+tag+'</span></div>'+
+      '<div style="color:#888;margin-top:4px;">id: '+esc(String(i.id))+' · 품번 '+esc(i.product_code||'-')+
+      ' · 수량 '+(i.quantity||1)+'개 중 '+(i.sold_quantity||0)+'개 판매'+
+      ' · 매입가(개당) '+((i.buy_price||0)).toLocaleString()+'원 · 판매가(개당) '+((i.sell_price||0)).toLocaleString()+'원'+
+      ' · fee '+((i.fee||0)).toLocaleString()+'원 · 판매일 '+(i.sell_date||'미입력')+'</div>'+
+      '<div style="margin-top:4px;font-weight:700;">순수익 '+(pi.profit===null?'(매입가 미입력)':((pi.profit>=0?'+':'')+pi.profit.toLocaleString()+'원')+(pi.rate!==null?' · 마진율 '+(pi.rate>=0?'+':'')+pi.rate+'%':''))+'</div>'+
+      '</div>';
+  }
+
+  var html='<div style="font-size:13px;margin-bottom:10px;">판매완료 '+sold.length+'건 중 확실한 오류 '+certain.length+'건, 의심 사례 '+suspect.length+'건, 마진율 이상치 '+outlier.length+'건 발견</div>';
+  if(certain.length){
+    html+='<div style="font-weight:700;font-size:13px;margin:10px 0 6px;color:#dc2626;">A. 확실한 오류 — 판매완료인데 안 팔린 수량이 남아있음</div>';
+    html+=certain.map(function(i){return rowHtml(i,'CERTAIN','#dc2626');}).join('');
+  }
+  if(suspect.length){
+    html+='<div style="font-weight:700;font-size:13px;margin:14px 0 6px;color:#d97706;">B. 의심 사례 — 수량 2개 이상 row가 한 번에 마감됨 (직접 확인 필요)</div>';
+    html+=suspect.map(function(i){return rowHtml(i,'SUSPECT','#d97706');}).join('');
+  }
+  if(outlier.length){
+    html+='<div style="font-weight:700;font-size:13px;margin:14px 0 6px;color:#7c3aed;">C. 마진율 150% 초과 (참고용, 정상일 수도 있음)</div>';
+    html+=outlier.map(function(i){return rowHtml(i,'OUTLIER','#7c3aed');}).join('');
+  }
+  if(!certain.length&&!suspect.length&&!outlier.length){
+    html+='<div style="color:#16a34a;font-size:13px;">의심되는 항목이 없습니다.</div>';
+  }
+  el.innerHTML=html;
 }
 
 document.getElementById('fd').value=new Date().toISOString().split('T')[0];
