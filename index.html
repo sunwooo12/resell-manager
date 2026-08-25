@@ -316,7 +316,7 @@ button.dfb.on{background:#1a1a1a;color:#fff;border-color:#1a1a1a;}
     <div class="modal-box">
       <div class="modal-title">묶음 발송 처리</div>
       <div id="bundleInfo" style="font-size:13px;color:#888;margin-bottom:16px;line-height:1.6;"></div>
-      <div class="modal-field"><div class="il">송장번호 (선택, 박스가 나뉘면 박스별로 따로 입력)</div><input type="text" id="bundleTracking" placeholder="408885868882"></div>
+      <div class="modal-field"><div class="il">송장번호 (선택 · 박스가 여러 개로 나뉘면 "박스 나눠 발송"을 사용하세요)</div><input type="text" id="bundleTracking" placeholder="408885868882"></div>
       <div class="modal-field"><div class="il">발송 플랫폼</div>
         <select id="bundlePlatform" style="width:100%;padding:9px 12px;border:1px solid #e2e0da;border-radius:8px;font-size:14px;font-family:'Noto Sans KR',sans-serif;">
           <option>크림(일반)</option><option>크림(보관)</option><option>포이즌</option>
@@ -329,6 +329,14 @@ button.dfb.on{background:#1a1a1a;color:#fff;border-color:#1a1a1a;}
         <button class="btnP" onclick="confirmBundleShip()">발송 확정</button>
         <button class="cb" style="padding:8px 16px;font-size:13px;" onclick="closeBundleModal()">취소</button>
       </div>
+    </div>
+  </div>
+
+  <!-- 박스 나눠 발송 모달 -->
+  <div id="boxShipModal" class="modal-bg" style="display:none;" onclick="if(event.target===this)closeBoxShipModal()">
+    <div class="modal-box" style="width:min(640px,96vw);">
+      <div class="modal-title">📦 박스 나눠 발송</div>
+      <div id="boxShipBody" style="font-size:13px;line-height:1.5;"></div>
     </div>
   </div>
 
@@ -566,6 +574,7 @@ function updateBundleBar(){
     el.innerHTML='<div class="bundle-bar">'+
       selPopHtml+
       '<button style="background:#3b82f6;color:#fff;" onclick="bundleShip()">묶음 발송</button>'+
+      '<button style="background:#6366f1;color:#fff;" onclick="openBoxShipModal()">박스 나눠 발송</button>'+
       '<button style="background:#0d9488;color:#fff;" onclick="copySelectedCodes()">품번 복사</button>'+
       '<select id="bulkStatusSel" style="'+inS+'" onchange="bulkChangeStatus(this)"><option value="">상태 선택</option>'+opts.map(function(s){return '<option>'+s+'</option>';}).join('')+'</select>'+
       '<button style="background:#dc2626;color:#fff;font-weight:700;" onclick="bulkDeleteAll()">선택 삭제</button>'+
@@ -811,6 +820,145 @@ async function confirmBundleShip(){
   await load();
   var msg=newlyShipped+'개 발송완료 처리됨';
   if(trackingNo)msg+=' · 송장 '+trackingUpdated+'개 저장';
+  showSimpleToast(msg);
+}
+
+// ── 박스 나눠 발송 (한 번에 여러 박스로 나눠 발송완료 처리) ─────
+var _boxShip={itemIds:[],boxes:[],assign:{}};
+function openBoxShipModal(){
+  var ids=Array.from(checkedItems).filter(function(id){
+    var it=items.find(function(x){return String(x.id)===id;});
+    return it&&it.status==='보유중';
+  });
+  var skipped=checkedItems.size-ids.length;
+  if(!ids.length){alert('보유중 상태인 항목을 체크해주세요. (발송완료 전인 항목만 이 기능으로 처리할 수 있어요)');return;}
+  _boxShip.itemIds=ids;
+  _boxShip.boxes=[{trackingNo:'',platform:'크림(일반)',courier:'',boxFee:''}];
+  _boxShip.assign={};
+  ids.forEach(function(id){_boxShip.assign[id]=0;});
+  document.getElementById('boxShipModal').style.display='flex';
+  _renderBoxShipModal(skipped?(skipped+'개는 이미 발송완료 상태라 제외했어요.'):null);
+}
+function closeBoxShipModal(){
+  document.getElementById('boxShipModal').style.display='none';
+}
+function addBoxShipBox(){
+  _boxShip.boxes.push({trackingNo:'',platform:'크림(일반)',courier:'',boxFee:''});
+  _renderBoxShipModal();
+}
+function removeBoxShipBox(idx){
+  if(_boxShip.boxes.length<=1)return;
+  _boxShip.boxes.splice(idx,1);
+  Object.keys(_boxShip.assign).forEach(function(id){
+    var a=_boxShip.assign[id];
+    if(a===idx)_boxShip.assign[id]=null;
+    else if(a!=null&&a>idx)_boxShip.assign[id]=a-1;
+  });
+  _renderBoxShipModal();
+}
+function _boxShipSetAssign(id,val){
+  _boxShip.assign[id]=val===''?null:parseInt(val);
+  _renderBoxShipModal();
+}
+function assignAllToBox(idx){
+  _boxShip.itemIds.forEach(function(id){_boxShip.assign[id]=idx;});
+  _renderBoxShipModal();
+}
+function _boxShipUpdateField(idx,field,val){
+  _boxShip.boxes[idx][field]=val;
+}
+function addAllHeldToBoxShip(){
+  var added=0;
+  items.forEach(function(it){
+    var sid=String(it.id);
+    if(it.status==='보유중'&&_boxShip.itemIds.indexOf(sid)===-1){
+      _boxShip.itemIds.push(sid);
+      _boxShip.assign[sid]=0;
+      added++;
+    }
+  });
+  _renderBoxShipModal(added?added+'개를 목록에 추가했어요.':'추가할 보유중 항목이 더 없어요.');
+}
+function _renderBoxShipModal(feedback){
+  var boxes=_boxShip.boxes;
+  var rows=_boxShip.itemIds.map(function(id){
+    var it=items.find(function(x){return String(x.id)===id;});
+    if(!it)return '';
+    var nameTxt=dedupeName(it.name,it.brand);
+    var opts='<option value=""'+(_boxShip.assign[id]==null?' selected':'')+'>미배정</option>'+
+      boxes.map(function(b,i){return '<option value="'+i+'"'+(_boxShip.assign[id]===i?' selected':'')+'>박스'+(i+1)+'</option>';}).join('');
+    return '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #f0f0f0;">'+
+      '<span style="flex:1;min-width:0;font-size:12.5px;">'+
+        '<b>'+esc(nameTxt)+'</b>'+(it.size?' <span style="color:#9ca3af;">('+esc(it.size)+')</span>':'')+
+        (it.product_code?'<div style="font-size:11px;color:#9ca3af;">'+esc(it.product_code)+'</div>':'')+
+      '</span>'+
+      '<select onchange="_boxShipSetAssign(\''+id+'\',this.value)" style="font-size:12px;padding:4px 6px;border-radius:6px;border:1px solid #e2e0da;flex-shrink:0;">'+opts+'</select>'+
+    '</div>';
+  }).join('');
+  var unassignedCnt=_boxShip.itemIds.filter(function(id){return _boxShip.assign[id]==null;}).length;
+  var boxesHtml=boxes.map(function(b,i){
+    var cnt=_boxShip.itemIds.filter(function(id){return _boxShip.assign[id]===i;}).length;
+    return '<div style="border:1px solid #e2e0da;border-radius:10px;padding:10px 12px;margin-bottom:8px;">'+
+      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">'+
+        '<b style="font-size:13px;">박스'+(i+1)+' <span style="color:#6b7280;font-weight:400;">('+cnt+'개)</span></b>'+
+        '<div style="display:flex;gap:6px;">'+
+          '<button type="button" onclick="assignAllToBox('+i+')" style="font-size:11px;background:#eef2ff;color:#4338ca;border:none;border-radius:6px;padding:4px 8px;cursor:pointer;">전체 담기</button>'+
+          (boxes.length>1?'<button type="button" onclick="removeBoxShipBox('+i+')" style="font-size:11px;background:#fee2e2;color:#dc2626;border:none;border-radius:6px;padding:4px 8px;cursor:pointer;">삭제</button>':'')+
+        '</div>'+
+      '</div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">'+
+        '<input type="text" placeholder="송장번호" value="'+esc(b.trackingNo)+'" oninput="_boxShipUpdateField('+i+',\'trackingNo\',this.value)" style="grid-column:1/-1;padding:7px 9px;border:1px solid #e2e0da;border-radius:7px;font-size:12.5px;">'+
+        '<select onchange="_boxShipUpdateField('+i+',\'platform\',this.value)" style="padding:7px 9px;border:1px solid #e2e0da;border-radius:7px;font-size:12.5px;grid-column:1/-1;">'+
+          ['크림(일반)','크림(보관)','포이즌'].map(function(p){return '<option'+(b.platform===p?' selected':'')+'>'+p+'</option>';}).join('')+
+        '</select>'+
+        '<input type="number" placeholder="택배비" value="'+esc(b.courier)+'" oninput="_boxShipUpdateField('+i+',\'courier\',this.value)" style="padding:7px 9px;border:1px solid #e2e0da;border-radius:7px;font-size:12.5px;">'+
+        '<input type="number" placeholder="박스값" value="'+esc(b.boxFee)+'" oninput="_boxShipUpdateField('+i+',\'boxFee\',this.value)" style="padding:7px 9px;border:1px solid #e2e0da;border-radius:7px;font-size:12.5px;">'+
+      '</div>'+
+    '</div>';
+  }).join('');
+  document.getElementById('boxShipBody').innerHTML=
+    (feedback?'<div style="background:#fffbeb;color:#92400e;border-radius:8px;padding:8px 10px;margin-bottom:10px;font-size:12.5px;">'+esc(feedback)+'</div>':'')+
+    '<div style="font-weight:700;margin-bottom:6px;">상품 목록 ('+_boxShip.itemIds.length+'개)'+
+      (unassignedCnt?' · <span style="color:#dc2626;">미배정 '+unassignedCnt+'개</span>':'')+
+    '</div>'+
+    '<div style="max-height:200px;overflow-y:auto;margin-bottom:12px;">'+(rows||'<div style="text-align:center;color:#9ca3af;padding:12px 0;font-size:13px;">항목이 없습니다</div>')+'</div>'+
+    '<button type="button" onclick="addAllHeldToBoxShip()" style="width:100%;background:#f3f4f6;color:#374151;border:none;border-radius:8px;padding:7px;font-size:12px;cursor:pointer;margin-bottom:12px;">+ 보유중 전체 담기</button>'+
+    '<div style="font-weight:700;margin-bottom:6px;">박스</div>'+
+    boxesHtml+
+    '<button type="button" onclick="addBoxShipBox()" style="width:100%;background:#f3f4f6;color:#374151;border:none;border-radius:8px;padding:8px;font-size:12.5px;cursor:pointer;margin-bottom:14px;">+ 박스 추가</button>'+
+    '<div style="display:flex;gap:8px;">'+
+      '<button class="btnP" onclick="confirmBoxShip()">발송 확정</button>'+
+      '<button class="cb" style="padding:8px 16px;font-size:13px;" onclick="closeBoxShipModal()">취소</button>'+
+    '</div>';
+}
+async function confirmBoxShip(){
+  var boxes=_boxShip.boxes;
+  var today=new Date().toISOString().split('T')[0];
+  var summary=[];
+  var totalShipped=0;
+  for(var bi=0;bi<boxes.length;bi++){
+    var box=boxes[bi];
+    var boxIds=_boxShip.itemIds.filter(function(id){return _boxShip.assign[id]===bi;});
+    if(!boxIds.length)continue;
+    var courier=parseInt(box.courier)||0,boxFee=parseInt(box.boxFee)||0;
+    var per=Math.round((courier+boxFee)/boxIds.length);
+    for(var i=0;i<boxIds.length;i++){
+      var it=items.find(function(x){return String(x.id)===boxIds[i];});
+      var curShip=it?it.shipping_cost||0:0;
+      var updateData={status:'발송완료',platform:box.platform,shipping_cost:curShip+per,shipped_date:today};
+      if(box.trackingNo)updateData.tracking_no=box.trackingNo.trim();
+      var res=await sb.from('items').update(updateData).eq('id',boxIds[i]);
+      if(res.error){alert('오류: '+res.error.message);return;}
+    }
+    totalShipped+=boxIds.length;
+    summary.push('박스'+(bi+1)+': '+boxIds.length+'개'+(box.trackingNo?'(송장 '+box.trackingNo.trim()+')':''));
+  }
+  if(!totalShipped){alert('배정된 상품이 없습니다. 각 상품을 박스에 배정해주세요.');return;}
+  var unassignedCnt=_boxShip.itemIds.filter(function(id){return _boxShip.assign[id]==null;}).length;
+  checkedItems.clear();
+  closeBoxShipModal();
+  await load();
+  var msg=summary.join(' · ')+' 발송완료'+(unassignedCnt?' · 미배정 '+unassignedCnt+'개는 보유중 유지':'');
   showSimpleToast(msg);
 }
 
