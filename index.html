@@ -591,8 +591,14 @@ async function bulkChangeStatus(sel){
   if(!ids.length){sel.value='';return;}
   if(!confirm(ids.length+'개 항목을 \''+status+'\' 상태로 변경할까요?')){sel.value='';return;}
   var sy=window.scrollY;
+  var shipToday=new Date().toISOString().split('T')[0];
   for(var i=0;i<ids.length;i++){
-    var res=await sb.from('items').update({status:status}).eq('id',ids[i]);
+    var updateData={status:status};
+    if(status==='발송완료'){
+      var it=items.find(function(x){return String(x.id)===ids[i];});
+      if(!it||it.status!=='발송완료')updateData.shipped_date=shipToday;
+    }
+    var res=await sb.from('items').update(updateData).eq('id',ids[i]);
     if(res.error){alert('오류: '+res.error.message);return;}
   }
   checkedItems.clear();
