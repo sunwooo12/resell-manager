@@ -316,6 +316,7 @@ button.dfb.on{background:#1a1a1a;color:#fff;border-color:#1a1a1a;}
     <div class="modal-box">
       <div class="modal-title">묶음 발송 처리</div>
       <div id="bundleInfo" style="font-size:13px;color:#888;margin-bottom:16px;line-height:1.6;"></div>
+      <div class="modal-field"><div class="il">송장번호 (선택, 박스가 나뉘면 박스별로 따로 입력)</div><input type="text" id="bundleTracking" placeholder="408885868882"></div>
       <div class="modal-field"><div class="il">발송 플랫폼</div>
         <select id="bundlePlatform" style="width:100%;padding:9px 12px;border:1px solid #e2e0da;border-radius:8px;font-size:14px;font-family:'Noto Sans KR',sans-serif;">
           <option>크림(일반)</option><option>크림(보관)</option><option>포이즌</option>
@@ -763,6 +764,7 @@ function bundleShip(){
   document.getElementById('bundleCalcInfo').textContent='';
   document.getElementById('bundleCourier').value='';
   document.getElementById('bundleBox').value='';
+  document.getElementById('bundleTracking').value='';
   document.getElementById('bundleModal').style.display='flex';
 }
 function calcBundlePreview(){
@@ -777,19 +779,33 @@ async function confirmBundleShip(){
   var c=parseInt(document.getElementById('bundleCourier').value)||0;
   var b=parseInt(document.getElementById('bundleBox').value)||0;
   var platform=document.getElementById('bundlePlatform').value;
+  var trackingNo=(document.getElementById('bundleTracking').value||'').trim();
   var per=Math.round((c+b)/Math.max(checkedItems.size,1));
   var ids=Array.from(checkedItems);
+  var newlyShipped=0,trackingUpdated=0;
   for(var i=0;i<ids.length;i++){
     var it=items.find(function(x){return String(x.id)===ids[i];});
-    var curShip=it?it.shipping_cost||0:0;
-    var updateData={status:'발송완료',platform:platform,shipping_cost:curShip+per};
-    if(!it||it.status!=='발송완료')updateData.shipped_date=new Date().toISOString().split('T')[0];
+    var alreadyShipped=it&&it.status==='발송완료';
+    var updateData={};
+    if(!alreadyShipped){
+      var curShip=it?it.shipping_cost||0:0;
+      updateData.status='발송완료';
+      updateData.platform=platform;
+      updateData.shipping_cost=curShip+per;
+      updateData.shipped_date=new Date().toISOString().split('T')[0];
+      newlyShipped++;
+    }
+    if(trackingNo){updateData.tracking_no=trackingNo;trackingUpdated++;}
+    if(!Object.keys(updateData).length)continue;
     var res=await sb.from('items').update(updateData).eq('id',ids[i]);
     if(res.error){alert('오류: '+res.error.message);return;}
   }
   checkedItems.clear();
   closeBundleModal();
-  load();
+  await load();
+  var msg=newlyShipped+'개 발송완료 처리됨';
+  if(trackingNo)msg+=' · 송장 '+trackingUpdated+'개 저장';
+  showSimpleToast(msg);
 }
 
 function onPlatformChange(selId,wrapId){
