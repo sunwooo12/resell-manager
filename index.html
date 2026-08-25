@@ -1988,6 +1988,42 @@ var _shipBox=[];
 var _shipMode='single';
 var _shipListPendingImages=[],_shipListPickerMode=false,_shipListRows=[],_shipListManualUI=null;
 var _shipListBulkTracking='',_shipListBulkOverwrite=false;
+var _shipListDateScope='today';
+var SHIP_DATE_SCOPES=[['today','오늘 발송분'],['2d','최근 2일'],['7d','최근 7일'],['all','전체']];
+function _shipScopeLabelText(scope){
+  var f=SHIP_DATE_SCOPES.find(function(o){return o[0]===scope;});
+  return f?f[1]:'전체';
+}
+function _shipScopeCutoffDate(scope){
+  if(scope==='all')return null;
+  var days=scope==='2d'?1:scope==='7d'?6:0;
+  var d=new Date();
+  d.setDate(d.getDate()-days);
+  return d.toISOString().split('T')[0];
+}
+// 발송완료 항목은 선택한 기간(shipped_date 기준) 안에서만 후보로 삼고, 아직 발송 전인 보유중 항목은 기간과 무관하게 후보 유지
+function _shipInDateScope(it){
+  if(it.status==='보유중')return true;
+  if(it.status!=='발송완료')return false;
+  var cutoff=_shipScopeCutoffDate(_shipListDateScope);
+  if(!cutoff)return true;
+  return !!it.shipped_date&&it.shipped_date>=cutoff;
+}
+function _shipDateScopeSelectHtml(){
+  var opts=SHIP_DATE_SCOPES.map(function(o){return '<option value="'+o[0]+'"'+(o[0]===_shipListDateScope?' selected':'')+'>'+o[1]+'</option>';}).join('');
+  return '<select onchange="_setShipListDateScope(this.value)" style="font-size:12px;padding:5px 8px;border-radius:6px;border:1px solid #e2e0da;font-family:\'Noto Sans KR\',sans-serif;">'+opts+'</select>';
+}
+function _setShipListDateScope(val){
+  _shipListDateScope=val;
+  if(_shipListRows.length)_rematchShipListRows();
+  _renderShipScanModal();
+}
+function _rematchShipListRows(){
+  var raw=_shipListRows.map(function(r){
+    return {storage_no:r.storage_no,product_no:r.product_no,name:r.name,size:r.size,tracking_no:r.tracking_no};
+  });
+  _buildShipListRows(raw);
+}
 
 function findHeldForDispatch(codes){
   var ncs=codes.map(normCode);
@@ -2217,6 +2253,7 @@ function _shipSizeMatchOrFree(a,b){
 function findHeldCodeMatch(row,usedIds){
   var cands=items.filter(function(it){
     if(!_shipCandidateStatusOk(it))return false;
+    if(!_shipInDateScope(it))return false;
     if(!it.product_code||!row.product_no)return false;
     if(usedIds.indexOf(it.id)!==-1)return false;
     if(_shipAlreadyProcessed(it,row))return false;
@@ -2241,6 +2278,27 @@ var SHIP_GENERIC_WORDS=[
   '코트','coat','베스트','vest','데님','denim','슈즈','shoes','스니커즈','sneakers',
   '가디건','cardigan','니트','knit'
 ];
+// 카테고리(옷/신발/가방 종류) 키워드 그룹 — 상품명 유사매칭 시 완전히 다른 종류의 상품이 우연히 단어 몇 개 겹쳐서
+// 매칭되는 걸 막는 하드 필터 (예: "볼캡"과 "티셔츠"는 단어가 겹쳐도 절대 같은 상품일 수 없음)
+var SHIP_TYPE_GROUPS=[
+  ['cap',['볼캡','버킷햇','버킷','헌팅캡','캡모자']],
+  ['top',['티셔츠','반팔티','긴팔티','후드티','후드','맨투맨','스웨트셔츠','가디건','베스트','블라우스','폴로셔츠']],
+  ['outer',['자켓','재킷','점퍼','패딩','무스탕','블루종']],
+  ['bottom',['팬츠','반바지','숏츠','슬랙스','청바지','조거팬츠','스커트','치마']],
+  ['shoes',['운동화','스니커즈','샌들','슬리퍼','부츠','로퍼']],
+  ['bag',['백팩','크로스백','숄더백','토트백','에코백','파우치','지갑']],
+  ['accessory',['목걸이','팔찌','귀걸이','벨트','장갑','머플러','목도리','양말']]
+];
+function _shipDetectType(text){
+  var norm=_shipNormText(text);
+  for(var i=0;i<SHIP_TYPE_GROUPS.length;i++){
+    var words=SHIP_TYPE_GROUPS[i][1];
+    for(var j=0;j<words.length;j++){
+      if(norm.indexOf(_shipNormText(words[j]))!==-1)return SHIP_TYPE_GROUPS[i][0];
+    }
+  }
+  return null;
+}
 function _shipNormText(s){return (s||'').toLowerCase().replace(/[^a-z0-9가-힣]/g,'');}
 function _shipDetectBrand(normText){
   var found=[];
@@ -2299,6 +2357,9 @@ function _shipSharedWordsFuzzy(aWords,bWords){
   return shared;
 }
 function _shipNameFuzzyMatch(dbItem,row){
+  var typeA=_shipDetectType((dbItem.brand||'')+' '+(dbItem.name||''));
+  var typeB=_shipDetectType(row.name||'');
+  if(typeA&&typeB&&typeA!==typeB)return false; // 카테고리(옷/신발/가방 종류)가 서로 다르면 단어가 겹쳐도 절대 매칭하지 않음
   var a=_shipTextSignature((dbItem.brand||'')+' '+(dbItem.name||''));
   var b=_shipTextSignature(row.name||'');
   var brandMatch=a.brand.length>0&&b.brand.length>0&&a.brand.some(function(c){return b.brand.indexOf(c)!==-1;});
@@ -2311,6 +2372,7 @@ function _shipNameFuzzyMatch(dbItem,row){
 function findHeldNameMatch(row,usedIds){
   var cands=items.filter(function(it){
     if(!_shipCandidateStatusOk(it))return false;
+    if(!_shipInDateScope(it))return false;
     if(it.product_code&&row.product_no)return false; // 양쪽 다 품번이 있으면 코드매칭(1단계)에 맡김 — 이미 실패했으면 오탐 위험이 크므로 이름매칭 안 함
     if(usedIds.indexOf(it.id)!==-1)return false;
     if(_shipAlreadyProcessed(it,row))return false;
@@ -2339,6 +2401,7 @@ function findHeldCodeInNameMatch(row,usedIds){
   if(rowDigits.length<5)return null;
   var cands=items.filter(function(it){
     if(!_shipCandidateStatusOk(it))return false;
+    if(!_shipInDateScope(it))return false;
     if(it.product_code)return false; // DB 품번 필드가 있으면 1단계에 맡김
     if(usedIds.indexOf(it.id)!==-1)return false;
     if(_shipAlreadyProcessed(it,row))return false;
@@ -2404,6 +2467,10 @@ function _shipListPickerBody(){
   }).join('');
   var btnStyle=cnt===0?'width:100%;background:#9ca3af;cursor:not-allowed;margin-top:8px;':'width:100%;background:#0d9488;margin-top:8px;';
   return '<div style="font-size:12px;color:#6b7280;margin-bottom:10px;">크림 앱의 <b>발송완료 목록</b> 화면을 캡처해서 올리면 보관번호·품번·사이즈·송장번호를 한번에 인식해서 보유중·발송완료 재고와 매칭해요. 보유중 항목은 발송완료로 전환, 이미 발송완료인 항목은 보관번호·송장번호만 채워요. 목록이 길면 스크롤해서 여러 장 올려도 됩니다.</div>'+
+    '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;background:#f7f6f2;border-radius:8px;padding:8px 10px;">'+
+      '<span style="font-size:12px;color:#374151;">매칭 대상 <b>'+_shipScopeLabelText(_shipListDateScope)+'</b> · '+items.filter(_shipInDateScope).length+'건</span>'+
+      _shipDateScopeSelectHtml()+
+    '</div>'+
     '<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">'+
       '<span style="font-size:13px;font-weight:600;">이미지</span>'+
       '<span id="_shipListImgCnt" style="font-size:12px;color:#6b7280;">'+cnt+'/5장</span>'+
@@ -2752,7 +2819,13 @@ function _shipListReviewBody(feedback){
 
   var totalInclude=includedGreen.length+includedYellow.length+manualIdx.length;
 
+  var scopeCandCnt=items.filter(_shipInDateScope).length;
+  var scopeBar='<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;background:#f7f6f2;border-radius:8px;padding:8px 10px;">'+
+      '<span style="font-size:12px;color:#374151;"><b>'+_shipScopeLabelText(_shipListDateScope)+'</b> 기준 · '+scopeCandCnt+'건 중 매칭</span>'+
+      _shipDateScopeSelectHtml()+
+    '</div>';
   return (feedback?'<div style="margin-bottom:10px;">'+feedback+'</div>':'')+
+    scopeBar+
     _shipListBulkTrackingBarHtml(includedGreen.length+includedYellow.length)+
     '<div style="font-weight:700;margin-bottom:8px;">인식 '+_shipListRows.length+'행 · <span style="color:#16a34a;">확실 '+greenIdx.length+'개</span> · <span style="color:#92400e;">확인필요 '+yellowIdx.length+'개</span> · <span style="color:#7c3aed;">직접처리 '+manualIdx.length+'개</span> · <span style="color:#dc2626;">매칭안됨 '+redIdx.length+'개</span></div>'+
     '<div style="font-size:12px;font-weight:600;color:#16a34a;margin-bottom:2px;">✅ 확실한 매칭 (품번+사이즈 일치)</div>'+
