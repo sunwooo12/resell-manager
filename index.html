@@ -624,9 +624,10 @@ async function bulkChangeStatus(sel){
     var res=await sb.from('items').update(updateData).eq('id',ids[i]);
     if(res.error){alert('오류: '+res.error.message);return;}
   }
-  checkedItems.clear();
   bulkBarCollapsed=false;
   await load();
+  var liveIds=new Set(items.map(function(i){return String(i.id);}));
+  Array.from(checkedItems).forEach(function(id){if(!liveIds.has(id))checkedItems.delete(id);});
   window.scrollTo(0,sy);
   if(shippedIds.length){
     var v=await _verifyShippedDateSaved(shippedIds[0]);
