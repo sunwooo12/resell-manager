@@ -2927,9 +2927,18 @@ function _shipListMatchRowHtml(i,tier){
   '</div>';
 }
 
-function _shipListBulkTrackingBarHtml(scopeCnt){
+function _shipListBulkScopeRows(){
+  return _shipListRows.filter(function(r){
+    return (r.matchTier===1&&!r.excluded)||(r.matchTier===2&&r.approved);
+  });
+}
+
+function _shipListBulkTrackingBarHtml(scopeRows){
   var val=_esc(_shipListBulkTracking||'');
   var checked=_shipListBulkOverwrite?' checked':'';
+  var scopeCnt=scopeRows.length;
+  var filledCnt=scopeRows.filter(function(r){return r.tracking_no;}).length;
+  var scopeNote='적용 대상: 확실한 매칭 + 승인된 확인필요 항목 ('+scopeCnt+'개'+(filledCnt?' · 이미 입력됨 '+filledCnt+'개':'')+')';
   return '<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:10px;margin-bottom:10px;">'+
     '<div style="font-size:12px;font-weight:700;color:#1d4ed8;margin-bottom:6px;">🔖 송장번호 일괄입력 <span style="font-weight:400;color:#6b7280;">— 묶음발송이면 한 번에 채우세요</span></div>'+
     '<div style="display:flex;gap:6px;">'+
@@ -2943,7 +2952,7 @@ function _shipListBulkTrackingBarHtml(scopeCnt){
       '<input type="checkbox" id="_shipListBulkOverwriteChk"'+checked+' onchange="_shipListBulkOverwrite=this.checked;" style="margin:0;">'+
       '전체 덮어쓰기 (체크 안 하면 인식된 번호는 그대로 두고 빈 항목만 채워요)'+
     '</label>'+
-    '<div style="font-size:10.5px;color:#93a5c9;margin-top:4px;">적용 대상: 확실한 매칭 + 승인된 확인필요 항목 ('+scopeCnt+'개)</div>'+
+    '<div style="font-size:10.5px;color:#93a5c9;margin-top:4px;">'+scopeNote+'</div>'+
   '</div>';
 }
 
@@ -2951,17 +2960,21 @@ function applyShipListBulkTracking(){
   var val=(_shipListBulkTracking||'').trim();
   if(!val){alert('송장번호를 입력해주세요.');return;}
   var overwrite=!!_shipListBulkOverwrite;
-  var cnt=0;
-  _shipListRows.forEach(function(r){
-    var inScope=(r.matchTier===1&&!r.excluded)||(r.matchTier===2&&r.approved);
-    if(!inScope)return;
-    if(overwrite||!r.tracking_no){r.tracking_no=val;cnt++;}
-  });
-  if(!cnt){
-    _renderShipListModal(_shipFbWarn('적용된 항목이 없습니다. (확실한 매칭 또는 승인된 확인필요 항목만 대상이에요)'));
+  var scopeRows=_shipListBulkScopeRows();
+  if(!scopeRows.length){
+    _renderShipListModal(_shipFbWarn('적용 대상이 없습니다. (확실한 매칭 또는 승인된 확인필요 항목만 대상이에요)'));
     return;
   }
-  _renderShipListModal(_shipFbOk('✅ 송장번호 "'+val+'" 을(를) '+cnt+'개 항목에 적용했습니다.'));
+  var cnt=0,skipped=0;
+  scopeRows.forEach(function(r){
+    if(overwrite||!r.tracking_no){r.tracking_no=val;cnt++;}
+    else skipped++;
+  });
+  if(!cnt){
+    _renderShipListModal(_shipFbWarn('매칭된 '+scopeRows.length+'개 항목에 이미 송장번호가 입력돼 있어 적용되지 않았습니다. 덮어쓰려면 \'전체 덮어쓰기\'를 체크한 뒤 다시 적용해주세요.'));
+    return;
+  }
+  _renderShipListModal(_shipFbOk('✅ 송장번호 "'+val+'" 을(를) '+cnt+'개 항목에 적용했습니다.'+(skipped?' (이미 입력된 '+skipped+'개는 유지)':'')));
 }
 
 function _shipListReviewBody(feedback){
@@ -3003,7 +3016,7 @@ function _shipListReviewBody(feedback){
     '</div>';
   return (feedback?'<div style="margin-bottom:10px;">'+feedback+'</div>':'')+
     scopeBar+
-    _shipListBulkTrackingBarHtml(includedGreen.length+includedYellow.length)+
+    _shipListBulkTrackingBarHtml(_shipListBulkScopeRows())+
     '<div style="font-weight:700;margin-bottom:8px;">인식 '+_shipListRows.length+'행 · <span style="color:#16a34a;">확실 '+greenIdx.length+'개</span> · <span style="color:#92400e;">확인필요 '+yellowIdx.length+'개</span> · <span style="color:#7c3aed;">직접처리 '+manualIdx.length+'개</span> · <span style="color:#dc2626;">매칭안됨 '+redIdx.length+'개</span></div>'+
     '<div style="font-size:12px;font-weight:600;color:#16a34a;margin-bottom:2px;">✅ 확실한 매칭 (품번+사이즈 일치)</div>'+
     '<div style="max-height:200px;overflow-y:auto;margin-bottom:2px;">'+greenHtml+'</div>'+
