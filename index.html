@@ -193,6 +193,7 @@ button.dfb.on{background:#1a1a1a;color:#fff;border-color:#1a1a1a;}
       <button class="fb" onclick="filt('보유중',this)">보유중</button>
       <button class="fb" onclick="filt('발송완료',this)">발송완료</button>
       <button class="fb" onclick="filt('판매대기',this)">판매대기</button>
+      <button class="fb" onclick="filt('정산대기',this)">정산대기</button>
       <button class="fb" onclick="filt('판매완료',this)">판매완료</button>
       <button class="fb" onclick="filt('취소/환불',this)">취소/환불</button>
       <span style="width:1px;height:18px;background:#e2e0da;display:inline-block;margin:0 2px;align-self:center;"></span>
@@ -206,6 +207,7 @@ button.dfb.on{background:#1a1a1a;color:#fff;border-color:#1a1a1a;}
             <button class="scanMenuItem" onclick="closeScanMenu();openScanPicker()">📥 입고</button>
             <button class="scanMenuItem" onclick="closeScanMenu();openShipScanModal()">📦 발송</button>
             <button class="scanMenuItem" onclick="closeScanMenu();openSellCapture()">💰 판매완료</button>
+            <button class="scanMenuItem" onclick="closeScanMenu();openKreamNotiModal()">📩 판매알림 붙여넣기</button>
           </div>
         </div>
       </div>
@@ -297,6 +299,16 @@ button.dfb.on{background:#1a1a1a;color:#fff;border-color:#1a1a1a;}
       <div id="orderBody" style="font-size:13px;line-height:1.6;"></div>
       <div id="orderActions" style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap;"></div>
       <button type="button" class="cb" style="margin-top:10px;width:100%;" onclick="_handleCloseOrder()">닫기</button>
+    </div>
+  </div>
+
+  <!-- 판매알림 붙여넣기 모달 -->
+  <div id="kreamNotiModal" class="modal-bg" style="display:none;">
+    <div class="modal-box" style="width:min(580px,96vw);">
+      <div class="modal-title">📩 판매알림 붙여넣기</div>
+      <div id="kreamNotiBody" style="font-size:13px;line-height:1.6;"></div>
+      <div id="kreamNotiActions" style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap;"></div>
+      <button type="button" class="cb" style="margin-top:10px;width:100%;" onclick="closeKreamNotiModal()">닫기</button>
     </div>
   </div>
 
@@ -582,7 +594,7 @@ function updateBundleBar(){
     '</div>';
     setBulkBarListPad(52);
   }else{
-    var opts=['주문완료','보유중','발송완료','판매대기','판매완료','취소/환불'];
+    var opts=['주문완료','보유중','발송완료','판매대기','정산대기','판매완료','취소/환불'];
     var inS='padding:6px 10px;border-radius:8px;border:none;font-size:13px;font-family:\'Noto Sans KR\',sans-serif;background:#333;color:#fff;cursor:pointer;';
     el.innerHTML='<div class="bundle-bar">'+
       selPopHtml+
@@ -1375,7 +1387,7 @@ function buildEditForm(it,ekey){
       '<div><div class="il">정산금액 (합계)</div><input type="number" id="est'+it.id+'" value="'+settleVal+'" style="'+s+'" placeholder="190000" oninput="calcEditPreview(\''+it.id+'\','+it.buy_price+','+sq+')"></div>'+
       '<div style="grid-column:1/-1"><div id="eprev'+it.id+'" style="display:none;background:#f8f9fa;border-radius:8px;padding:12px 16px;display:flex;gap:20px;align-items:center;flex-wrap:wrap;"></div></div>'+
       '<div><div class="il">등록 플랫폼</div><select id="epf'+it.id+'" onchange="onPlatformChange(\'epf'+it.id+'\',\'epfsd'+it.id+'\')" style="'+s+'"><option value="">-</option>'+selOpts(PLATFORMS,it.platform||'')+'</select></div>'+
-      '<div><div class="il">상태 변경</div><select id="est2'+it.id+'" style="'+s+'">'+selOpts(['주문완료','보유중','발송완료','판매대기','판매완료','취소/환불','등록중'],it.status)+'</select></div>'+
+      '<div><div class="il">상태 변경</div><select id="est2'+it.id+'" style="'+s+'">'+selOpts(['주문완료','보유중','발송완료','판매대기','정산대기','판매완료','취소/환불','등록중'],it.status)+'</select></div>'+
       '<div id="epfsd'+it.id+'" style="'+(it.platform==='크림(보관)'?'':'display:none;')+'"><div class="il">입고일 (크림 창고)</div><input type="date" id="esd2'+it.id+'" value="'+(it.storage_date||(it.platform==='크림(보관)'?kstToday():''))+'" style="'+s+'"></div>'+
       '<div><div class="il">배송비 (개당)</div><input type="number" id="esc'+it.id+'" value="'+(it.shipping_cost||'')+'" style="'+s+'" placeholder="0"></div>'+
       '<div><div class="il">기타비용</div><input type="number" id="eoc'+it.id+'" value="'+(it.other_cost||'')+'" style="'+s+'" placeholder="0"></div>'+
@@ -1396,6 +1408,7 @@ function statusBadge(s){
   if(s==='등록중')return 'bB';
   if(s==='발송완료')return 'bP';
   if(s==='판매대기')return 'bW';
+  if(s==='정산대기')return 'bT';
   if(s==='취소/환불')return 'bX';
   return 'bG';
 }
@@ -1441,11 +1454,15 @@ function card(it,batchNum,totalBatches){
                '<div><div class="ml">마진율</div><div class="mv '+(marginRate>=0?'g':'r')+'">'+(marginRate>=0?'+':'')+marginRate+'%</div></div>';
       }()):'<div><div class="ml">순수익</div><div class="mv" style="color:#aaa;font-size:12px;">매입가 입력 필요</div></div>'+
            '<div><div class="ml">마진율</div><div class="mv" style="color:#aaa;font-size:12px;">-</div></div>');
+  }else if(it.status==='정산대기'){
+    metaItems+='<div><div class="ml">판매가 (개당)</div><div class="mv">'+(it.sell_price||0).toLocaleString()+'원</div></div>'+
+      '<div><div class="ml">정산금액</div><div class="mv" style="color:#c2410c;">정산 대기 중</div></div>'+
+      '<div><div class="ml">플랫폼</div><div class="mv">'+(it.platform||'-')+'</div></div>';
   }else if(it.platform&&(it.status==='발송완료'||it.status==='판매대기'||it.status==='등록중')){
     metaItems+='<div><div class="ml">플랫폼</div><div class="mv">'+(it.platform||'-')+'</div></div>';
   }
-  // 창고보관비 — platform=크림(보관) AND status가 판매대기/판매완료일 때만 표시
-  if(it.platform==='크림(보관)'&&it.storage_start_date&&(it.status==='판매대기'||it.status==='판매완료')){
+  // 창고보관비 — platform=크림(보관) AND status가 판매대기/정산대기/판매완료일 때만 표시
+  if(it.platform==='크림(보관)'&&it.storage_start_date&&(it.status==='판매대기'||it.status==='정산대기'||it.status==='판매완료')){
     var sdays=calcStorageDays(it.storage_start_date);
     var sfee=calcStorageFee(it.storage_start_date);
     metaItems+='<div><div class="ml">창고보관비</div><div class="mv '+(sfee>0?'r':'g')+'">'+
@@ -1477,6 +1494,10 @@ function card(it,batchNum,totalBatches){
     ?'<span onclick="event.stopPropagation();if(confirm(\'판매일을 오늘 날짜로 채울까요? (수익 집계에 반영됩니다)\'))quickFillSellDate(\''+it.id+'\');" title="클릭하면 오늘 날짜로 채워져 수익 집계에 반영돼요" style="cursor:pointer;font-size:10px;font-weight:700;background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:999px;white-space:nowrap;">⚠ 판매일 입력 필요</span>'
     :'';
 
+  var settleWaitBadge=it.status==='정산대기'
+    ?'<span title="정산금액이 입력되면 판매완료로 전환돼요" style="font-size:10px;font-weight:700;background:#ccfbf1;color:#0f766e;padding:2px 8px;border-radius:999px;white-space:nowrap;">정산 대기 중</span>'
+    :'';
+
   var chevron='<span style="color:#bbb;font-size:10px;margin-left:6px;">'+(isExpanded?'▲':'▼')+'</span>';
 
   var ekey='ef'+it.id;
@@ -1494,7 +1515,7 @@ function card(it,batchNum,totalBatches){
   var sellForm='<div class="inf'+(oid===sellKey?' on':'')+'" id="'+sellKey+'">'+
     '<div class="ig">'+
     '<div><div class="il">판매 수량 (최대 '+remain+'개)</div><input type="number" id="sq'+it.id+'" value="'+remain+'" min="1" max="'+remain+'" oninput="calcSell(\''+it.id+'\','+it.buy_price+')"></div>'+
-    '<div><div class="il">판매가 (원, 개당)</div><input type="number" id="sp'+it.id+'" placeholder="200000" oninput="calcSell(\''+it.id+'\','+it.buy_price+')"></div>'+
+    '<div><div class="il">판매가 (원, 개당)</div><input type="number" id="sp'+it.id+'" value="'+(it.sell_price||'')+'" placeholder="200000" oninput="calcSell(\''+it.id+'\','+it.buy_price+')"></div>'+
     '<div><div class="il">정산금액 (원, 합계)</div><input type="number" id="st'+it.id+'" placeholder="190000" oninput="calcSell(\''+it.id+'\','+it.buy_price+')"></div>'+
     '<div><div class="il">판매일</div><input type="date" id="sd'+it.id+'" value="'+today+'"></div>'+
     '</div>'+
@@ -1532,6 +1553,10 @@ function card(it,batchNum,totalBatches){
     acts+='<button class="btnP" onclick="tog(\''+sellKey+'\')">판매 확정</button>'+
           '<button class="btnD" onclick="del(\''+it.id+'\')">삭제</button>';
     inlineForm+=sellForm;
+  }else if(it.status==='정산대기'){
+    acts+='<button class="btnP" onclick="tog(\''+sellKey+'\')">정산금액 입력</button>'+
+          '<button class="btnD" onclick="del(\''+it.id+'\')">삭제</button>';
+    inlineForm+=sellForm;
   }else if(it.status==='판매완료'&&remain>0){
     acts+='<button class="btnP" onclick="openSellCompleteModal(\''+it.id+'\')">💰 판매완료</button>';
     acts+='<button class="btnD" onclick="del(\''+it.id+'\')">삭제</button>';
@@ -1550,6 +1575,8 @@ function card(it,batchNum,totalBatches){
       :'<button class="qa-btn qa-primary" onclick="event.stopPropagation();tog(\''+sellKey+'\')" title="판매 확정">💰 판매완료</button>';
   }else if(it.status==='판매대기'){
     qaNext='<button class="qa-btn qa-primary" onclick="event.stopPropagation();tog(\''+sellKey+'\')" title="판매 확정">💰 판매완료</button>';
+  }else if(it.status==='정산대기'){
+    qaNext='<button class="qa-btn qa-primary" onclick="event.stopPropagation();tog(\''+sellKey+'\')" title="정산금액 입력">🧾 정산</button>';
   }else if(it.status==='판매완료'&&remain>0){
     qaNext='<button class="qa-btn qa-primary" onclick="event.stopPropagation();openSellCompleteModal(\''+it.id+'\')" title="판매완료">💰 판매완료</button>';
   }
@@ -1559,7 +1586,7 @@ function card(it,batchNum,totalBatches){
     '<button class="qa-btn qa-danger" onclick="event.stopPropagation();del(\''+it.id+'\')" title="삭제">🗑️</button>'+
   '</span>';
 
-  var shipTag=['발송완료','판매대기','판매완료'].indexOf(it.status)!==-1
+  var shipTag=['발송완료','판매대기','정산대기','판매완료'].indexOf(it.status)!==-1
     ?(it.tracking_no?'송장 '+it.tracking_no:(it.storage_no?'보관 '+it.storage_no:null))
     :null;
 
@@ -1572,7 +1599,7 @@ function card(it,batchNum,totalBatches){
           [it.size,it.source,it.buy_date?'매입 '+it.buy_date:null,it.buy_price?(it.buy_price).toLocaleString()+'원':'매입가 미입력',shipTag].filter(Boolean).join(' · ')+
         '</div>'+
       '</div>'+
-      '<div class="badges">'+storageBadge+noDateBadge+fifoBadge+(function(){
+      '<div class="badges">'+storageBadge+settleWaitBadge+noDateBadge+fifoBadge+(function(){
         if(it.status!=='판매완료'||(it.sold_quantity||0)===0)return '';
         if(!(it.buy_price||0))return '<span style="font-size:11px;color:#aaa;white-space:nowrap;">매입가 미입력</span>';
         var sq=it.sold_quantity||0;
@@ -3359,12 +3386,24 @@ function _sellSizeMatches(it,ns){
   if(!ns||!it.size)return false;
   return normSize(it.size)===ns;
 }
+function _sellCandidateStatusOk(it){
+  return it.status==='주문완료'||it.status==='보유중'||it.status==='발송완료'||it.status==='판매대기'||it.status==='정산대기';
+}
 function findSellCandidates(aiItem){
+  // 보관번호가 있으면 우선 그걸로 정확 매칭 — 정산대기 항목은 이미 판매가만 채워진 채 정산금액을
+  // 기다리는 상태라서, 이 경로(정산화면 캡처)로 들어오면 보관번호로 바로 찾아야 정확함
+  var sn=_storageNoNorm(aiItem.storage_no||'');
+  if(sn){
+    var byStorage=fifoSort(items.filter(function(it){
+      return _sellCandidateStatusOk(it)&&_storageNoNorm(it.storage_no)===sn;
+    }));
+    if(byStorage.length)return byStorage;
+  }
   var nc=normCode(aiItem.product_code||'');
   if(!nc)return [];
   var ns=normSize(aiItem.size||'');
   var cands=fifoSort(items.filter(function(it){
-    if(it.status!=='주문완료'&&it.status!=='보유중'&&it.status!=='발송완료'&&it.status!=='판매대기')return false;
+    if(!_sellCandidateStatusOk(it))return false;
     return _sellCodeMatch(it,nc);
   }));
   cands.sort(function(a,b){
@@ -3426,8 +3465,10 @@ function _buildSellRows(){
     var matched=alts[0]||null;
     if(matched)usedIds.push(matched.id);
     var alreadySold=!matched?findAlreadySold(aiItem):[];
+    // 정산대기 항목은 판매가가 이미 확정돼 있으므로, 이번 캡처에서 판매가가 따로 인식되지 않았다면 그 값을 기본으로 보여준다
+    var defaultSellPrice=aiItem.sell_price||(matched&&matched.status==='정산대기'?matched.sell_price||0:0);
     return{aiItem:aiItem,matched:matched,alts:alts,alreadySold:alreadySold,isDuplicate:false,duplicateOf:null,
-      sellPrice:aiItem.sell_price||0,
+      sellPrice:defaultSellPrice,
       settlementAmount:aiItem.settlement_amount||0,
       sellDate:aiItem.sell_date||''};
   });
@@ -3636,7 +3677,7 @@ function renderSellRow(row,i){
         '판매일 '+_esc(sold.sell_date||'-')+
       '</div></div>';
   }else{
-    var avail=items.filter(function(it){return it.status==='판매대기'||it.status==='발송완료';});
+    var avail=items.filter(function(it){return it.status==='판매대기'||it.status==='정산대기'||it.status==='발송완료';});
     matchHtml='<div style="background:#fef3c7;border-radius:8px;padding:8px 12px;margin-bottom:8px;">'+
       '<div style="'+lStyle+'color:#d97706;font-weight:700;margin-bottom:3px;">⚠️ 매칭 안 됨 — 직접 선택 또는 새로 등록</div>'+
       _aiCodeLine(row.aiItem)+
@@ -3737,10 +3778,12 @@ async function confirmSellRegister(){
       var newSold=prevSold+1;
       var totalQty=item.quantity||1;
       var newStatus=newSold>=totalQty?'판매완료':item.status;
-      var effectiveSp=rSp||rSt;
+      // 정산대기 항목은 판매가가 이미 확정돼 있으므로(카톡 알림에서 기록), 이번 캡처에서
+      // 판매가가 새로 인식되지 않았다면 기존 값을 우선 쓰고, 그마저 없을 때만 정산금액으로 대체한다
+      var effectiveSp=rSp||(item.status==='정산대기'?item.sell_price:0)||rSt;
       var prevSettle=(item.sell_price||0)*prevSold-(item.fee||0);
       var totalSettle=prevSettle+(rSt||0);
-      var newFee=rSp>0&&rSt>0?rSp*newSold-totalSettle:0;
+      var newFee=effectiveSp>0&&rSt>0?effectiveSp*newSold-totalSettle:0;
       updates.push({id:item.id,data:{status:newStatus,sell_price:effectiveSp,fee:newFee,sell_date:rSd||undefined,sold_quantity:newSold}});
     }else{
       alert((i+1)+'번 항목: 재고를 선택하거나 "+ 새 항목으로 등록"을 눌러주세요.');return;
@@ -3761,6 +3804,179 @@ async function confirmSellRegister(){
     document.getElementById('sellModal').style.display='none';
     var total=updates.length+inserts.length;
     alert('처리 '+total+'건'+(dupSkipped?', 중복 건너뜀 '+dupSkipped+'건':'')+'!'+(inserts.length?' (신규 등록 '+inserts.length+'건 포함)':''));
+    load();
+  }catch(e){alert('처리 오류: '+e.message);}
+}
+
+// ── 판매알림(카톡) 붙여넣기 → 정산대기 처리 ────────────────
+var _kreamNotiRows=[];
+
+// "[KREAM] 보관 판매 거래 체결" 형태의 카톡 알림 텍스트(여러 건 이어 붙여넣기 포함)를 각 건으로 분리해 파싱
+function _parseKreamSaleNotis(text){
+  if(!text)return [];
+  var norm=text.replace(/\r\n/g,'\n');
+  var parts=norm.split(/(?=▶\s*보관번호)/).map(function(s){return s.trim();}).filter(Boolean);
+  var rows=[];
+  parts.forEach(function(b){
+    var snoM=b.match(/보관번호[:\s]*([A-Za-z0-9\-]+)/);
+    if(!snoM)return;
+    var nameM=b.match(/상품명[:\s]*(.+)/);
+    var optM=b.match(/옵션명[:\s]*(.+)/);
+    var priceM=b.match(/판매가[:\s]*([\d,]+)/);
+    rows.push({
+      storage_no:snoM[1].trim(),
+      name:nameM?nameM[1].trim():'',
+      size:optM?optM[1].trim():'',
+      sell_price:priceM?parseInt(priceM[1].replace(/,/g,''),10):0
+    });
+  });
+  return rows;
+}
+
+function _kreamNotiFallbackOk(it){
+  return it.status==='판매대기'||it.status==='발송완료'||it.status==='보유중';
+}
+// 보관번호로 1:1 정확 매칭 → 실패하면 상품명+사이즈 보조매칭. 이미 정산대기/판매완료인 건 중복으로 분리.
+function _buildKreamNotiRows(parsed){
+  var usedIds=[];
+  return parsed.map(function(p){
+    var row={storage_no:p.storage_no,name:p.name,size:p.size,sell_price:p.sell_price,
+      matched:null,matchTier:null,excluded:false,approved:false,duplicateOf:null};
+    var sn=_storageNoNorm(p.storage_no);
+    var dup=sn?items.find(function(it){return(it.status==='정산대기'||it.status==='판매완료')&&_storageNoNorm(it.storage_no)===sn;}):null;
+    if(dup){row.duplicateOf=dup;return row;}
+    var m1=sn?items.find(function(it){return it.status!=='취소/환불'&&_storageNoNorm(it.storage_no)===sn&&usedIds.indexOf(it.id)===-1;}):null;
+    if(m1){row.matched=m1;row.matchTier=1;usedIds.push(m1.id);return row;}
+    var m2=items.find(function(it){
+      if(!_kreamNotiFallbackOk(it))return false;
+      if(usedIds.indexOf(it.id)!==-1)return false;
+      if(it.size&&p.size&&normSize(it.size)!==normSize(p.size))return false;
+      return _shipNameFuzzyMatch(it,{name:p.name});
+    });
+    if(m2){row.matched=m2;row.matchTier=2;usedIds.push(m2.id);}
+    return row;
+  });
+}
+
+function openKreamNotiModal(){
+  _kreamNotiRows=[];
+  _showKreamNotiPickerUI();
+  document.getElementById('kreamNotiModal').style.display='flex';
+}
+function closeKreamNotiModal(){
+  document.getElementById('kreamNotiModal').style.display='none';
+}
+function _kreamNotiPickerBody(){
+  return '<p style="font-size:12px;color:#6b7280;margin-bottom:8px;">크림 앱의 <b>보관 판매 거래 체결</b> 카카오톡 알림 문자를 그대로 복사해서 붙여넣으세요. 여러 건을 한 번에 이어 붙여넣어도 각각 인식돼요.</p>'+
+    '<textarea id="_kreamNotiInput" rows="10" placeholder="[KREAM] 보관 판매 거래 체결\n▶ 보관번호: I-SW12401640-1\n▶ 상품명: 나이키 스트라이드 드라이핏 5인치 브리프 라인드 러닝 쇼츠 스모크 그레이 - 아시아\n▶ 옵션명: L\n▶ 판매가: 46,000원" style="width:100%;box-sizing:border-box;padding:10px;border:1.5px solid #3b82f6;border-radius:8px;font-size:12.5px;font-family:monospace;resize:vertical;"></textarea>'+
+    '<button type="button" class="sb" style="width:100%;margin-top:10px;background:#7c3aed;" onclick="parseKreamNotiInput()">파싱하기</button>';
+}
+function _showKreamNotiPickerUI(){
+  document.getElementById('kreamNotiBody').innerHTML=_kreamNotiPickerBody();
+  document.getElementById('kreamNotiActions').innerHTML='';
+}
+
+function parseKreamNotiInput(){
+  var text=(document.getElementById('_kreamNotiInput')||{}).value||'';
+  var parsed=_parseKreamSaleNotis(text);
+  if(!parsed.length){
+    document.getElementById('kreamNotiBody').innerHTML=_kreamNotiPickerBody()+_shipFbWarn('인식된 알림이 없습니다. 카카오톡 문자를 그대로(▶ 보관번호: ... 형식 포함) 붙여넣어주세요.');
+    return;
+  }
+  _kreamNotiRows=_buildKreamNotiRows(parsed);
+  _renderKreamNotiReview();
+}
+
+function excludeKreamNotiRow(i){_kreamNotiRows[i].excluded=true;_renderKreamNotiReview();}
+function restoreKreamNotiExcluded(){_kreamNotiRows.forEach(function(r){r.excluded=false;});_renderKreamNotiReview();}
+function approveKreamNotiRow(i){_kreamNotiRows[i].approved=true;_renderKreamNotiReview();}
+function unapproveKreamNotiRow(i){_kreamNotiRows[i].approved=false;_renderKreamNotiReview();}
+
+function _kreamNotiRowHtml(i){
+  var r=_kreamNotiRows[i];
+  var priceTxt=r.sell_price?r.sell_price.toLocaleString()+'원':'-';
+  if(r.duplicateOf){
+    var d=r.duplicateOf;
+    return '<div style="padding:8px 10px;border-bottom:1px solid #f0f0f0;font-size:12.5px;">'+
+      '<div><span style="color:#6b7280;font-weight:700;">중복 (이미 '+_esc(d.status)+')</span> — '+_esc(r.name||d.name||'')+(r.size?' ('+_esc(r.size)+')':'')+'</div>'+
+      '<div style="font-size:11px;color:#9ca3af;margin-top:2px;">보관번호: '+_esc(r.storage_no||'-')+' · 판매가: '+priceTxt+'</div>'+
+    '</div>';
+  }
+  if(!r.matched){
+    return '<div style="padding:8px 10px;border-bottom:1px solid #fee2e2;font-size:12.5px;">'+
+      '<div><span style="color:#dc2626;font-weight:700;">매칭 안 됨</span> — '+_esc(r.name||'(상품명 미인식)')+(r.size?' · 사이즈: '+_esc(r.size):'')+'</div>'+
+      '<div style="font-size:11px;color:#9ca3af;margin-top:2px;">보관번호: '+_esc(r.storage_no||'-')+' · 판매가: '+priceTxt+'</div>'+
+    '</div>';
+  }
+  var it=r.matched;
+  var actionBtn=r.matchTier===1
+    ?'<button type="button" onclick="excludeKreamNotiRow('+i+')" title="제외" style="background:none;border:none;cursor:pointer;font-size:20px;color:#9ca3af;line-height:1;flex-shrink:0;padding:0 4px;">×</button>'
+    :(r.approved
+        ?'<button type="button" onclick="unapproveKreamNotiRow('+i+')" style="background:#fde68a;color:#92400e;border:none;border-radius:6px;padding:5px 10px;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0;white-space:nowrap;">취소</button>'
+        :'<button type="button" onclick="approveKreamNotiRow('+i+')" style="background:#16a34a;color:#fff;border:none;border-radius:6px;padding:5px 10px;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0;white-space:nowrap;">승인</button>');
+  var reasonNote=r.matchTier===2?'<div style="font-size:11px;color:#92400e;margin-top:2px;">보관번호 불일치·미기재 — 상품명·사이즈 유사매칭</div>':'';
+  return '<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #f0f0f0;">'+
+    '<span style="flex:1;min-width:0;">'+
+      '<b>'+_esc(dedupeName(it.name,it.brand))+(it.size?' ('+_esc(it.size)+')':'')+'</b>'+
+      '<div style="font-size:11px;color:#6b7280;margin-top:2px;">보관번호: <b style="color:#374151;">'+_esc(r.storage_no||'-')+'</b> · 판매가: <b style="color:#374151;">'+priceTxt+'</b></div>'+
+      reasonNote+
+    '</span>'+actionBtn+
+  '</div>';
+}
+
+function _renderKreamNotiReview(feedback){
+  var greenIdx=[],yellowIdx=[],dupIdx=[],redIdx=[];
+  _kreamNotiRows.forEach(function(r,i){
+    if(r.duplicateOf)dupIdx.push(i);
+    else if(r.matchTier===1)greenIdx.push(i);
+    else if(r.matchTier===2)yellowIdx.push(i);
+    else redIdx.push(i);
+  });
+  var includedGreen=greenIdx.filter(function(i){return!_kreamNotiRows[i].excluded;});
+  var includedYellow=yellowIdx.filter(function(i){return _kreamNotiRows[i].approved;});
+  var excludedGreenCnt=greenIdx.length-includedGreen.length;
+  var totalInclude=includedGreen.length+includedYellow.length;
+
+  var greenHtml=greenIdx.length?greenIdx.map(function(i){return _kreamNotiRowHtml(i);}).join(''):'<div style="text-align:center;color:#9ca3af;padding:10px 0;font-size:13px;">없음</div>';
+  var yellowHtml=yellowIdx.map(function(i){return _kreamNotiRowHtml(i);}).join('');
+  var dupHtml=dupIdx.map(function(i){return _kreamNotiRowHtml(i);}).join('');
+  var redHtml=redIdx.map(function(i){return _kreamNotiRowHtml(i);}).join('');
+  var excludedNote=excludedGreenCnt?'<div style="font-size:12px;color:#9ca3af;margin:2px 0 8px;">제외됨 '+excludedGreenCnt+'개 · <a href="#" onclick="event.preventDefault();restoreKreamNotiExcluded()" style="color:#3b82f6;">되돌리기</a></div>':'';
+
+  var body=(feedback?'<div style="margin-bottom:10px;">'+feedback+'</div>':'')+
+    '<div style="font-weight:700;margin-bottom:8px;">인식 '+_kreamNotiRows.length+'건 · <span style="color:#16a34a;">확실 '+greenIdx.length+'개</span> · <span style="color:#92400e;">확인필요 '+yellowIdx.length+'개</span> · <span style="color:#6b7280;">중복 '+dupIdx.length+'개</span> · <span style="color:#dc2626;">매칭안됨 '+redIdx.length+'개</span></div>'+
+    '<div style="font-size:12px;font-weight:600;color:#16a34a;margin-bottom:2px;">✅ 확실한 매칭 (보관번호 일치)</div>'+
+    '<div style="max-height:200px;overflow-y:auto;margin-bottom:2px;">'+greenHtml+'</div>'+
+    excludedNote+
+    (yellowIdx.length?'<div style="font-size:12px;font-weight:600;color:#92400e;margin:8px 0 2px;">⚠️ 확인 필요 (상품명 유사매칭) — 확인 후 승인해주세요</div>'+
+      '<div style="max-height:200px;overflow-y:auto;margin-bottom:2px;background:#fffbeb;border-radius:8px;padding:0 8px;">'+yellowHtml+'</div>':'')+
+    (dupIdx.length?'<div style="font-size:12px;font-weight:600;color:#6b7280;margin:8px 0 2px;">🔁 중복 (이미 정산대기/판매완료) — 자동 건너뜀</div>'+
+      '<div style="max-height:160px;overflow-y:auto;margin-bottom:2px;background:#f8f9fa;border-radius:8px;padding:0 8px;">'+dupHtml+'</div>':'')+
+    (redIdx.length?'<div style="font-size:12px;font-weight:600;color:#dc2626;margin:8px 0 2px;">❌ 매칭 안 됨 — 보관번호·상품명을 확인해주세요</div>'+
+      '<div style="max-height:200px;overflow-y:auto;margin-bottom:10px;background:#fef2f2;border-radius:8px;">'+redHtml+'</div>':'<div style="margin-bottom:10px;"></div>');
+  document.getElementById('kreamNotiBody').innerHTML=body;
+  document.getElementById('kreamNotiActions').innerHTML=
+    '<button type="button" class="sb" style="flex:1;background:#6b7280;" onclick="_showKreamNotiPickerUI()">다시 붙여넣기</button>'+
+    (totalInclude?'<button type="button" class="sb" style="flex:2;background:#ef4444;" onclick="confirmKreamNotiApply()">🗂 정산대기 처리 ('+totalInclude+'개)</button>':'');
+}
+
+async function confirmKreamNotiApply(){
+  if(!sb){alert('설정 탭에서 Supabase 키를 먼저 입력해주세요.');return;}
+  var toApply=_kreamNotiRows.filter(function(r){return r.matched&&((r.matchTier===1&&!r.excluded)||(r.matchTier===2&&r.approved));});
+  if(!toApply.length){alert('정산대기로 처리할 항목이 없습니다.');return;}
+  if(!confirm(toApply.length+'개 항목을 정산대기로 처리할까요?\n(판매가가 기록되고, 정산금액은 나중에 입력합니다)'))return;
+  try{
+    var results=await Promise.all(toApply.map(function(r){
+      var upd={status:'정산대기',sell_price:r.sell_price||r.matched.sell_price||0};
+      if(r.storage_no&&!r.matched.storage_no)upd.storage_no=r.storage_no;
+      return sb.from('items').update(upd).eq('id',r.matched.id);
+    }));
+    var err=results.find(function(res){return res.error;});
+    if(err){alert('오류: '+err.error.message);return;}
+    var cnt=toApply.length;
+    _kreamNotiRows=[];
+    document.getElementById('kreamNotiModal').style.display='none';
+    alert('✅ '+cnt+'개 항목을 정산대기로 처리했습니다. 정산금액은 각 항목의 "정산금액 입력"에서 나중에 채워주세요.');
     load();
   }catch(e){alert('처리 오류: '+e.message);}
 }
@@ -4217,7 +4433,10 @@ async function updateItem(id){
   // 판매가 또는 정산금액이 입력돼 있으면(신규 입력이든 기존 값 유지든) 그 항목을 판매완료로 확정한다.
   // 이미 판매 이력이 있는 row(origSq>0)는 그 판매수량 기준으로 정산을 다시 맞추고,
   // 아직 안 판 row(origSq===0)는 현재 "수량" 전체를 이번에 판매한 것으로 처리한다.
-  var saleInput=sellPrice>0||settle>0;
+  // 단, 정산대기 항목은 판매가가 이미 채워진 채로 폼이 열리므로(카톡 알림에서 기록됨),
+  // 그 값만 보고는 판매완료로 넘기지 않고 정산금액을 실제로 입력했을 때만 넘긴다.
+  var isSettleWaitEdit=item&&item.status==='정산대기'&&origSq===0;
+  var saleInput=isSettleWaitEdit?settle>0:(sellPrice>0||settle>0);
   if(saleInput){
     var saleQty=origSq>0?origSq:qty;
     updateData.sell_price=sellPrice;
@@ -4228,6 +4447,8 @@ async function updateItem(id){
   }else{
     var newStatus=document.getElementById('est2'+id).value;
     if(newStatus){updateData.status=newStatus;}
+    // 정산금액 없이 저장 — 정산대기 상태를 유지한 채 판매가만 고쳤을 수 있으니 반영
+    if(isSettleWaitEdit&&newStatus==='정산대기'){updateData.sell_price=sellPrice;}
     // 상태 변경 시 해당 상태에 맞지 않는 필드 자동 정리
     if(newStatus){
       var preShip=['주문완료','보유중'];
