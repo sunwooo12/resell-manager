@@ -188,7 +188,7 @@ button.dfb.on{background:#1a1a1a;color:#fff;border-color:#1a1a1a;}
       <input class="search-input" type="text" id="searchInput" placeholder="상품명, 브랜드, 품번, 사이즈, 보관번호, 송장번호로 검색..." oninput="searchQ=this.value;render()">
     </div>
     <div class="toolbar">
-      <button class="fb on" onclick="filt('all',this)">전체</button>
+      <button class="fb" onclick="filt('all',this)">전체</button>
       <button class="fb" onclick="filt('주문완료',this)">주문완료</button>
       <button class="fb" onclick="filt('보유중',this)">보유중</button>
       <button class="fb" onclick="filt('발송완료',this)">발송완료</button>
@@ -501,7 +501,8 @@ ALTER TABLE items ADD COLUMN IF NOT EXISTS other_cost INT DEFAULT 0;</div>
 
 </main>
 <script>
-var sb=null,items=[],cf='all',pf='all',oid=null,expanded=new Set(),checkedItems=new Set(),searchQ='',sortAsc=true,dateFilterMode='all',dateFilterCustom='',dateFilterYm='',grpExpanded=new Set(),selPopOpen=false,bulkBarCollapsed=false;
+var sb=null,items=[],cf='active',pf='all',oid=null,expanded=new Set(),checkedItems=new Set(),searchQ='',sortAsc=true,dateFilterMode='all',dateFilterCustom='',dateFilterYm='',grpExpanded=new Set(),selPopOpen=false,bulkBarCollapsed=false;
+var ACTIVE_STATUSES=['주문완료','보유중','발송완료','판매대기','정산대기'];
 var PLATFORMS=['크림(일반)','크림(보관)','포이즌','기타'];
 // new Date().toISOString()는 UTC 기준이라 한국시간 자정~오전9시 사이엔 날짜가 하루 밀려서 저장되는 버그가 있었음.
 // "오늘 날짜"가 필요한 모든 곳(shipped_date 등)은 반드시 이 함수로 한국시간(Asia/Seoul) 기준으로 구해야 함.
@@ -1208,7 +1209,8 @@ function render(){
   updateDateFilterCardTitle();
   var dateField=dateFieldFor();
   var filtered=items.filter(function(i){
-    if(cf!=='all'&&i.status!==cf)return false;
+    if(cf==='active'){if(ACTIVE_STATUSES.indexOf(i.status)===-1)return false;}
+    else if(cf!=='all'&&i.status!==cf)return false;
     if(cat!=='all'&&(i.category||'기타')!==cat)return false;
     if(pf!=='all'&&(i.platform||'')!==pf)return false;
     if(searchQ){
