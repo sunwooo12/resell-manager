@@ -197,6 +197,7 @@ button.dfb.on{background:#1a1a1a;color:#fff;border-color:#1a1a1a;}
       <button class="fb" onclick="filt('정산대기',this)">정산대기</button>
       <button class="fb" onclick="filt('판매완료',this)">판매완료</button>
       <button class="fb" onclick="filt('취소/환불',this)">취소/환불</button>
+      <button class="fb" id="noStorageFilterBtn" style="color:#dc2626;border-color:#fca5a5;" onclick="filt('noStorage',this)">⚠️ 보관번호 없음<span id="noStorageCount" style="margin-left:3px;"></span></button>
       <span style="width:1px;height:18px;background:#e2e0da;display:inline-block;margin:0 2px;align-self:center;"></span>
       <button class="fb" id="filterToggleBtn" onclick="toggleFilterPanel()">필터 <span id="filterToggleArrow">▾</span><span id="filterDot"></span></button>
       <div style="margin-left:auto;display:flex;flex-direction:column;gap:6px;align-items:stretch;">
@@ -517,6 +518,7 @@ ALTER TABLE items ADD COLUMN IF NOT EXISTS other_cost INT DEFAULT 0;</div>
 <script>
 var sb=null,items=[],cf='active',pf='all',oid=null,expanded=new Set(),checkedItems=new Set(),searchQ='',sortAsc=true,dateFilterMode='all',dateFilterCustom='',dateFilterYm='',grpExpanded=new Set(),selPopOpen=false,bulkBarCollapsed=false;
 var ACTIVE_STATUSES=['주문완료','보유중','발송완료','판매대기','정산대기'];
+var STORAGE_REQUIRED_STATUSES=['발송완료','판매대기'];
 var PLATFORMS=['크림(일반)','크림(보관)','포이즌','기타'];
 // new Date().toISOString()는 UTC 기준이라 한국시간 자정~오전9시 사이엔 날짜가 하루 밀려서 저장되는 버그가 있었음.
 // "오늘 날짜"가 필요한 모든 곳(shipped_date 등)은 반드시 이 함수로 한국시간(Asia/Seoul) 기준으로 구해야 함.
@@ -651,6 +653,10 @@ async function bulkChangeStatus(sel){
     var res=await sb.from('items').update(updateData).eq('id',ids[i]);
     if(res.error){alert('오류: '+res.error.message);return;}
   }
+  var noStorageCnt=status==='발송완료'?shippedIds.filter(function(id){
+    var it=items.find(function(x){return String(x.id)===id;});
+    return it&&!it.storage_no;
+  }).length:0;
   bulkBarCollapsed=false;
   await load();
   var liveIds=new Set(items.map(function(i){return String(i.id);}));
@@ -658,7 +664,9 @@ async function bulkChangeStatus(sel){
   window.scrollTo(0,sy);
   if(shippedIds.length){
     var v=await _verifyShippedDateSaved(shippedIds[0]);
-    if(v)showSimpleToast((v.ok?'✅ ':'⚠️ ')+shippedIds.length+'개 발송완료 · shipped_date 확인('+v.value+')');
+    var msg=(v&&v.ok?'✅ ':'⚠️ ')+shippedIds.length+'개 발송완료 · shipped_date 확인('+(v?v.value:'-')+')';
+    if(noStorageCnt>0)msg+=' · ⚠️ 보관번호 미입력 '+noStorageCnt+'건 — 나중에 발송목록 캡처로 채우세요';
+    showSimpleToast(msg);
   }
 }
 function toggleSelPop(){
@@ -843,7 +851,7 @@ async function confirmBundleShip(){
   var trackingNo=(document.getElementById('bundleTracking').value||'').trim();
   var per=Math.round((c+b)/Math.max(checkedItems.size,1));
   var ids=Array.from(checkedItems);
-  var newlyShipped=0,trackingUpdated=0,firstShippedId=null;
+  var newlyShipped=0,trackingUpdated=0,firstShippedId=null,newlyShippedIds=[];
   for(var i=0;i<ids.length;i++){
     var it=items.find(function(x){return String(x.id)===ids[i];});
     var alreadyShipped=it&&it.status==='발송완료';
@@ -855,6 +863,7 @@ async function confirmBundleShip(){
       updateData.shipping_cost=curShip+per;
       updateData.shipped_date=kstToday();
       newlyShipped++;
+      newlyShippedIds.push(ids[i]);
       if(!firstShippedId)firstShippedId=ids[i];
     }
     if(trackingNo){updateData.tracking_no=trackingNo;trackingUpdated++;}
@@ -862,6 +871,10 @@ async function confirmBundleShip(){
     var res=await sb.from('items').update(updateData).eq('id',ids[i]);
     if(res.error){alert('오류: '+res.error.message);return;}
   }
+  var noStorageCnt=newlyShippedIds.filter(function(id){
+    var it=items.find(function(x){return String(x.id)===id;});
+    return it&&!it.storage_no;
+  }).length;
   checkedItems.clear();
   closeBundleModal();
   await load();
@@ -871,6 +884,7 @@ async function confirmBundleShip(){
     var v=await _verifyShippedDateSaved(firstShippedId);
     if(v)msg+=' · '+(v.ok?'✅ shipped_date 확인('+v.value+')':'⚠️ shipped_date 불일치! DB값: '+v.value);
   }
+  if(noStorageCnt>0)msg+=' · ⚠️ 보관번호 미입력 '+noStorageCnt+'건 — 나중에 발송목록 캡처로 채우세요';
   showSimpleToast(msg);
 }
 
@@ -986,7 +1000,7 @@ async function confirmBoxShip(){
   var boxes=_boxShip.boxes;
   var today=kstToday();
   var summary=[];
-  var totalShipped=0,firstShippedId=null;
+  var totalShipped=0,firstShippedId=null,shippedIds=[];
   for(var bi=0;bi<boxes.length;bi++){
     var box=boxes[bi];
     var boxIds=_boxShip.itemIds.filter(function(id){return _boxShip.assign[id]===bi;});
@@ -1001,12 +1015,17 @@ async function confirmBoxShip(){
       var res=await sb.from('items').update(updateData).eq('id',boxIds[i]);
       if(res.error){alert('오류: '+res.error.message);return;}
       if(!firstShippedId)firstShippedId=boxIds[i];
+      shippedIds.push(boxIds[i]);
     }
     totalShipped+=boxIds.length;
     summary.push('박스'+(bi+1)+': '+boxIds.length+'개'+(box.trackingNo?'(송장 '+box.trackingNo.trim()+')':''));
   }
   if(!totalShipped){alert('배정된 상품이 없습니다. 각 상품을 박스에 배정해주세요.');return;}
   var unassignedCnt=_boxShip.itemIds.filter(function(id){return _boxShip.assign[id]==null;}).length;
+  var noStorageCnt=shippedIds.filter(function(id){
+    var it=items.find(function(x){return String(x.id)===id;});
+    return it&&!it.storage_no;
+  }).length;
   checkedItems.clear();
   closeBoxShipModal();
   await load();
@@ -1015,6 +1034,7 @@ async function confirmBoxShip(){
     var v=await _verifyShippedDateSaved(firstShippedId);
     if(v)msg+=' · '+(v.ok?'✅ shipped_date 확인('+v.value+')':'⚠️ shipped_date 불일치! DB값: '+v.value);
   }
+  if(noStorageCnt>0)msg+=' · ⚠️ 보관번호 미입력 '+noStorageCnt+'건 — 나중에 발송목록 캡처로 채우세요';
   showSimpleToast(msg);
 }
 
@@ -1221,9 +1241,15 @@ function render(){
   updateFilterDot();
   updateYmLabel();
   updateDateFilterCardTitle();
+  var nsCntEl=document.getElementById('noStorageCount');
+  if(nsCntEl){
+    var nsCnt=items.filter(function(i){return STORAGE_REQUIRED_STATUSES.indexOf(i.status)!==-1&&!i.storage_no;}).length;
+    nsCntEl.textContent=nsCnt>0?'('+nsCnt+')':'';
+  }
   var dateField=dateFieldFor();
   var filtered=items.filter(function(i){
     if(cf==='active'){if(ACTIVE_STATUSES.indexOf(i.status)===-1)return false;}
+    else if(cf==='noStorage'){if(STORAGE_REQUIRED_STATUSES.indexOf(i.status)===-1||i.storage_no)return false;}
     else if(cf!=='all'&&i.status!==cf)return false;
     if(cat!=='all'&&(i.category||'기타')!==cat)return false;
     if(pf!=='all'&&(i.platform||'')!==pf)return false;
@@ -1514,6 +1540,10 @@ function card(it,batchNum,totalBatches){
     ?'<span title="정산금액이 입력되면 판매완료로 전환돼요" style="font-size:10px;font-weight:700;background:#ccfbf1;color:#0f766e;padding:2px 8px;border-radius:999px;white-space:nowrap;">정산 대기 중</span>'
     :'';
 
+  var noStorageBadge=(STORAGE_REQUIRED_STATUSES.indexOf(it.status)!==-1&&!it.storage_no)
+    ?'<span title="엑셀 정산 시 보관번호로 매칭이 안 돼요 — 발송목록 캡처나 직접 입력으로 채워주세요" style="font-size:10px;font-weight:700;background:#fee2e2;color:#dc2626;padding:2px 8px;border-radius:999px;white-space:nowrap;">⚠️ 보관번호 없음</span>'
+    :'';
+
   var chevron='<span style="color:#bbb;font-size:10px;margin-left:6px;">'+(isExpanded?'▲':'▼')+'</span>';
 
   var ekey='ef'+it.id;
@@ -1615,7 +1645,7 @@ function card(it,batchNum,totalBatches){
           [it.size,it.source,it.buy_date?'매입 '+it.buy_date:null,it.buy_price?(it.buy_price).toLocaleString()+'원':'매입가 미입력',shipTag].filter(Boolean).join(' · ')+
         '</div>'+
       '</div>'+
-      '<div class="badges">'+storageBadge+settleWaitBadge+noDateBadge+fifoBadge+(function(){
+      '<div class="badges">'+storageBadge+settleWaitBadge+noStorageBadge+noDateBadge+fifoBadge+(function(){
         if(it.status!=='판매완료'||(it.sold_quantity||0)===0)return '';
         if(!(it.buy_price||0))return '<span style="font-size:11px;color:#aaa;white-space:nowrap;">매입가 미입력</span>';
         var sq=it.sold_quantity||0;
@@ -2403,6 +2433,7 @@ async function confirmShipDispatch(){
   if(!_shipBox.length){alert('발송할 상품이 없습니다.');return;}
   if(!sb){alert('설정 탭에서 Supabase 키를 먼저 입력해주세요.');return;}
   var ids=_shipBox.map(function(it){return it.id;});
+  var noStorageCnt=_shipBox.filter(function(it){return !it.storage_no;}).length;
   try{
     var shipToday=kstToday();
     var results=await Promise.all(ids.map(function(id){return sb.from('items').update({status:'발송완료',shipped_date:shipToday}).eq('id',id);}));
@@ -2411,7 +2442,9 @@ async function confirmShipDispatch(){
     var cnt=_shipBox.length;
     _shipBox=[];
     document.getElementById('shipScanModal').style.display='none';
-    alert(cnt+'개를 발송완료 처리했습니다!');
+    var msg=cnt+'개를 발송완료 처리했습니다!';
+    if(noStorageCnt>0)msg+='\n⚠️ 보관번호 미입력 '+noStorageCnt+'건 — 나중에 발송목록 캡처로 채우세요';
+    alert(msg);
     load();
   }catch(e){alert('발송 처리 오류: '+e.message);}
 }
@@ -4503,14 +4536,18 @@ async function confShipWithPlatform(id){
   var updateData={status:'발송완료',platform:platform,shipping_cost:(item.shipping_cost||0)+shipCost};
   var willSetShipDate=!item||item.status!=='발송완료';
   if(willSetShipDate)updateData.shipped_date=kstToday();
+  var noStorage=!item||!item.storage_no;
   var res=await sb.from('items').update(updateData).eq('id',id);
   if(res.error){alert('오류: '+res.error.message);return;}
   oid=null;
   await load();
+  var msgParts=[];
   if(willSetShipDate){
     var v=await _verifyShippedDateSaved(id);
-    if(v)showSimpleToast(v.ok?'✅ 발송완료 · shipped_date 저장 확인('+v.value+')':'⚠️ shipped_date 불일치! DB값: '+v.value);
+    if(v)msgParts.push(v.ok?'✅ 발송완료 · shipped_date 저장 확인('+v.value+')':'⚠️ shipped_date 불일치! DB값: '+v.value);
   }
+  if(noStorage)msgParts.push('⚠️ 보관번호 미입력 — 나중에 발송목록 캡처로 채우세요');
+  if(msgParts.length)showSimpleToast(msgParts.join(' · '));
 }
 
 async function confWait(id){
