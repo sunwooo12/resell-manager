@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>리셀 재고관리</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap');
 *{box-sizing:border-box;margin:0;padding:0;}
@@ -199,7 +200,10 @@ button.dfb.on{background:#1a1a1a;color:#fff;border-color:#1a1a1a;}
       <span style="width:1px;height:18px;background:#e2e0da;display:inline-block;margin:0 2px;align-self:center;"></span>
       <button class="fb" id="filterToggleBtn" onclick="toggleFilterPanel()">필터 <span id="filterToggleArrow">▾</span><span id="filterDot"></span></button>
       <div style="margin-left:auto;display:flex;flex-direction:column;gap:6px;align-items:stretch;">
-        <button class="ab" style="margin-left:0;" onclick="go(1)">+ 매입 등록</button>
+        <div style="display:flex;gap:6px;">
+          <button class="ab" style="margin-left:0;background:#0ea5e9;flex:1;white-space:nowrap;" onclick="openExcelSettleModal()">📊 엑셀 정산</button>
+          <button class="ab" style="margin-left:0;flex:1;white-space:nowrap;" onclick="go(1)">+ 매입 등록</button>
+        </div>
         <div style="position:relative;">
           <button class="ab" id="scanMenuBtn" style="margin-left:0;background:#7c3aed;width:100%;" onclick="toggleScanMenu()">📷 스캔 ▾</button>
           <div id="scanMenuDrop" style="display:none;position:absolute;right:0;top:calc(100% + 4px);background:#fff;border:1px solid #e2e0da;border-radius:10px;box-shadow:0 4px 24px rgba(0,0,0,0.13);z-index:300;min-width:170px;overflow:hidden;">
@@ -311,6 +315,16 @@ button.dfb.on{background:#1a1a1a;color:#fff;border-color:#1a1a1a;}
       <button type="button" class="cb" style="margin-top:10px;width:100%;" onclick="closeKreamNotiModal()">닫기</button>
     </div>
   </div>
+
+  <!-- 엑셀 정산 모달 -->
+  <div id="excelSettleModal" class="modal-bg" style="display:none;" onclick="if(event.target===this)_handleCloseExcelSettle()">
+    <div class="modal-box" style="width:min(640px,96vw);">
+      <div class="modal-title">📊 엑셀 정산</div>
+      <div id="excelSettleBody" style="font-size:13px;line-height:1.6;"></div>
+      <button class="cb" style="margin-top:10px;width:100%;" onclick="_handleCloseExcelSettle()">닫기</button>
+    </div>
+  </div>
+  <input type="file" id="excelSettleFile" accept=".csv,.xlsx,.xls" style="display:none;" onchange="runExcelSettleFile(this)">
 
   <!-- 발송 스캔 모달 -->
   <div id="shipScanModal" class="modal-bg" style="display:none;" onclick="if(event.target===this)closeShipScanModal()">
@@ -3982,6 +3996,288 @@ async function confirmKreamNotiApply(){
     load();
   }catch(e){alert('처리 오류: '+e.message);}
 }
+
+// ── 엑셀 정산 (넘버원셀러 판매내역 CSV/엑셀 업로드 → 판매완료+정산금액 일괄 처리) ──
+var _excelSettleRows=[],_excelSettlePickerMode=false;
+
+function openExcelSettleModal(){
+  _excelSettleRows=[];
+  _excelSettlePickerMode=true;
+  document.getElementById('excelSettleModal').style.display='flex';
+  _renderExcelSettleModal();
+}
+function closeExcelSettleModal(){
+  document.getElementById('excelSettleModal').style.display='none';
+}
+function _handleCloseExcelSettle(){
+  if(_excelSettleRows.length&&!confirm('아직 처리 안 된 정산 내역이 있어요. 닫을까요?'))return;
+  _excelSettleRows=[];
+  _excelSettlePickerMode=false;
+  closeExcelSettleModal();
+}
+
+function _excelSettlePickerBody(){
+  return '<p style="font-size:12px;color:#6b7280;margin-bottom:10px;">넘버원셀러 판매내역 CSV 또는 엑셀 파일을 업로드하면, 파일의 <b>주문번호</b>를 재고의 <b>보관번호</b>와 매칭해 판매완료 처리 + 정산금액을 한 번에 반영해요.</p>'+
+    '<button type="button" class="sb" style="width:100%;background:#0ea5e9;" onclick="document.getElementById(\'excelSettleFile\').click()">🗂 CSV/엑셀 파일 선택</button>';
+}
+function _showExcelSettlePickerUI(){
+  document.getElementById('excelSettleBody').innerHTML=_excelSettlePickerBody();
+}
+function _renderExcelSettleModal(feedback){
+  if(_excelSettlePickerMode){_showExcelSettlePickerUI();return;}
+  document.getElementById('excelSettleBody').innerHTML=_excelSettleReviewBody(feedback);
+}
+
+function _readFileAsArrayBuffer(file){
+  return new Promise(function(resolve,reject){
+    var r=new FileReader();
+    r.onload=function(){resolve(r.result);};
+    r.onerror=function(){reject(new Error('파일을 읽을 수 없습니다.'));};
+    r.readAsArrayBuffer(file);
+  });
+}
+
+async function _parseExcelSettleFile(file){
+  if(typeof XLSX==='undefined')throw new Error('엑셀 파싱 라이브러리를 불러오지 못했습니다.');
+  var buf=await _readFileAsArrayBuffer(file);
+  var wb=XLSX.read(buf,{type:'array'});
+  var sheetName=wb.SheetNames[0];
+  var sheet=wb.Sheets[sheetName];
+  return XLSX.utils.sheet_to_json(sheet,{defval:'',raw:false});
+}
+
+function _excelCol(row,key){
+  if(row[key]!==undefined)return row[key];
+  var k=Object.keys(row).find(function(k2){return k2.trim()===key;});
+  return k?row[k]:'';
+}
+function _excelNum(v){
+  if(v===null||v===undefined||v==='')return 0;
+  if(typeof v==='number')return Math.round(v);
+  var s=String(v).trim();
+  var neg=/^\(.*\)$/.test(s);
+  s=s.replace(/[(),원\s]/g,'');
+  var n=parseInt(s,10);
+  if(isNaN(n))return 0;
+  return neg?-Math.abs(n):n;
+}
+function _excelDateNorm(v){
+  if(v===null||v===undefined||v==='')return '';
+  var s=String(v).trim();
+  var m=s.match(/(\d{4})\D(\d{1,2})\D(\d{1,2})/);
+  if(m)return m[1]+'-'+String(m[2]).padStart(2,'0')+'-'+String(m[3]).padStart(2,'0');
+  return '';
+}
+
+// 매칭 우선순위: 1) 보관번호(주문번호) 정확 매칭(고유·확실) → 2) 실패 시에만 품번+사이즈로 FIFO(가장 오래된 재고) 1개만(확인 필요).
+// 절대 여러 개를 한 행에 매칭하지 않는다 — 엑셀 1행 = 재고 1개 판매.
+function _buildExcelSettleRows(rawRows){
+  var usedIds=[];
+  _excelSettleRows=rawRows.map(function(r){
+    var orderNo=String(_excelCol(r,'주문번호')||'').trim();
+    var name=String(_excelCol(r,'제품명')||'').trim();
+    var code=String(_excelCol(r,'품번')||'').trim();
+    var size=String(_excelCol(r,'사이즈')||'').trim();
+    var sellPrice=_excelNum(_excelCol(r,'판매가'));
+    var settleAmount=_excelNum(_excelCol(r,'정산금액'));
+    var sellDate=_excelDateNorm(_excelCol(r,'판매일'));
+    var trackingNo=String(_excelCol(r,'송장번호')||'').trim();
+    var row={
+      orderNo:orderNo,name:name,productCode:code,size:size,
+      sellPrice:sellPrice,settleAmount:settleAmount,sellDate:sellDate,trackingNo:trackingNo,
+      matched:null,matchTier:null,isDuplicate:false,duplicateOf:null,approved:false,excluded:false
+    };
+    if(!orderNo&&!code)return row;
+
+    var sn=_storageNoNorm(orderNo);
+    if(sn){
+      var exactActive=items.find(function(it){
+        return _sellCandidateStatusOk(it)&&_storageNoNorm(it.storage_no)===sn&&usedIds.indexOf(it.id)===-1;
+      });
+      if(exactActive){row.matched=exactActive;row.matchTier=1;usedIds.push(exactActive.id);return row;}
+      var exactSold=items.find(function(it){return it.status==='판매완료'&&_storageNoNorm(it.storage_no)===sn;});
+      if(exactSold){row.isDuplicate=true;row.duplicateOf=exactSold;return row;}
+    }
+
+    if(code){
+      var nc=normCode(code),ns=normSize(size);
+      var cands=items.filter(function(it){
+        if(!_sellCandidateStatusOk(it))return false;
+        if(usedIds.indexOf(it.id)!==-1)return false;
+        if(normCode(it.product_code||'')!==nc)return false;
+        if(ns&&normSize(it.size||'')!==ns)return false;
+        return true;
+      });
+      cands=fifoSort(cands);
+      if(cands.length){row.matched=cands[0];row.matchTier=2;usedIds.push(cands[0].id);return row;}
+
+      var dupFallback=items.find(function(it){
+        if(it.status!=='판매완료')return false;
+        if(normCode(it.product_code||'')!==nc)return false;
+        if(ns&&normSize(it.size||'')!==ns)return false;
+        var derivedSettle=(it.sell_price||0)*(it.sold_quantity||it.quantity||1)-(it.fee||0);
+        return settleAmount>0&&derivedSettle===settleAmount;
+      });
+      if(dupFallback){row.isDuplicate=true;row.duplicateOf=dupFallback;return row;}
+    }
+    return row;
+  });
+}
+
+async function runExcelSettleFile(input){
+  if(!input.files||!input.files[0])return;
+  var file=input.files[0];
+  input.value='';
+  document.getElementById('excelSettleBody').innerHTML='<div style="text-align:center;color:#6b7280;padding:24px 0;">📊 파일 분석 중...</div>';
+  try{
+    var rawRows=await _parseExcelSettleFile(file);
+    if(!rawRows.length){
+      document.getElementById('excelSettleBody').innerHTML='<p style="color:#d97706;font-weight:700;">⚠️ 파일에서 데이터를 읽지 못했습니다.</p>'+
+        '<button type="button" class="sb" style="width:100%;margin-top:10px;" onclick="_excelSettlePickerMode=true;_renderExcelSettleModal()">다시 시도</button>';
+      return;
+    }
+    _buildExcelSettleRows(rawRows);
+    _excelSettlePickerMode=false;
+    _renderExcelSettleModal();
+  }catch(e){
+    document.getElementById('excelSettleBody').innerHTML='<p style="color:#dc2626;">❌ 오류: '+_esc(e.message)+'</p>'+
+      '<button type="button" class="sb" style="width:100%;margin-top:10px;" onclick="_excelSettlePickerMode=true;_renderExcelSettleModal()">다시 시도</button>';
+  }
+}
+
+function _excelSettleExclude(i){_excelSettleRows[i].excluded=true;_renderExcelSettleModal();}
+function _excelSettleRestore(){_excelSettleRows.forEach(function(r){r.excluded=false;});_renderExcelSettleModal();}
+function _excelSettleApprove(i){_excelSettleRows[i].approved=true;_renderExcelSettleModal();}
+function _excelSettleUnapprove(i){_excelSettleRows[i].approved=false;_renderExcelSettleModal();}
+
+function _excelSettleRowHtml(i,tier){
+  var r=_excelSettleRows[i],it=r.matched;
+  var actionBtn=tier===1
+    ?'<button type="button" onclick="_excelSettleExclude('+i+')" title="제외" style="background:none;border:none;cursor:pointer;font-size:20px;color:#9ca3af;line-height:1;flex-shrink:0;padding:0 4px;">×</button>'
+    :(r.approved
+        ?'<button type="button" onclick="_excelSettleUnapprove('+i+')" style="background:#fde68a;color:#92400e;border:none;border-radius:6px;padding:5px 10px;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0;white-space:nowrap;">취소</button>'
+        :'<button type="button" onclick="_excelSettleApprove('+i+')" style="background:#16a34a;color:#fff;border:none;border-radius:6px;padding:5px 10px;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0;white-space:nowrap;">승인</button>');
+  var reasonNote=tier===2
+    ?'<div style="font-size:11px;color:#92400e;margin-top:2px;">보관번호 불일치 — 품번+사이즈로 매칭 (가장 오래된 재고 1개, FIFO)</div>'
+    :'';
+  return '<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #f0f0f0;">'+
+    '<span style="flex:1;min-width:0;">'+
+      '<b>'+_esc(dedupeName(it.name,it.brand))+(it.size?' ('+_esc(it.size)+')':'')+'</b>'+
+      '<div style="font-size:11px;color:#6b7280;margin-top:2px;">주문번호: <b style="color:#374151;">'+_esc(r.orderNo||'-')+'</b> · 판매가 '+r.sellPrice.toLocaleString()+'원 · 정산 '+r.settleAmount.toLocaleString()+'원 · '+_esc(r.sellDate||'-')+'</div>'+
+      reasonNote+
+    '</span>'+actionBtn+
+  '</div>';
+}
+function _excelSettleDupHtml(i){
+  var r=_excelSettleRows[i],d=r.duplicateOf;
+  return '<div style="padding:8px 10px;border-bottom:1px solid #f0f0f0;font-size:12.5px;">'+
+    '<div><span style="color:#6b7280;font-weight:700;">이미 처리됨</span> — '+_esc(r.name||r.productCode||'')+(r.size?' ('+_esc(r.size)+')':'')+'</div>'+
+    '<div style="font-size:11px;color:#9ca3af;margin-top:2px;">주문번호: '+_esc(r.orderNo||'-')+' · 기존 판매일 '+_esc(d.sell_date||'-')+'</div>'+
+  '</div>';
+}
+function _excelSettleRedHtml(i){
+  var r=_excelSettleRows[i];
+  return '<div style="padding:8px 10px;border-bottom:1px solid #fee2e2;font-size:12.5px;">'+
+    '<div><span style="color:#dc2626;font-weight:700;">매칭 안 됨</span> — '+_esc(r.name||r.productCode||'(상품명 없음)')+(r.size?' · 사이즈 '+_esc(r.size):'')+'</div>'+
+    '<div style="font-size:11px;color:#9ca3af;margin-top:2px;">주문번호: '+_esc(r.orderNo||'-')+' · 품번 '+_esc(r.productCode||'-')+' · 판매가 '+r.sellPrice.toLocaleString()+'원</div>'+
+  '</div>';
+}
+
+function _excelSettleReviewBody(feedback){
+  var greenIdx=[],yellowIdx=[],dupIdx=[],redIdx=[];
+  _excelSettleRows.forEach(function(r,i){
+    if(r.isDuplicate)dupIdx.push(i);
+    else if(r.matchTier===1)greenIdx.push(i);
+    else if(r.matchTier===2)yellowIdx.push(i);
+    else redIdx.push(i);
+  });
+  var includedGreen=greenIdx.filter(function(i){return !_excelSettleRows[i].excluded;});
+  var includedYellow=yellowIdx.filter(function(i){return _excelSettleRows[i].approved;});
+  var excludedGreenCnt=greenIdx.length-includedGreen.length;
+  var totalInclude=includedGreen.length+includedYellow.length;
+
+  var greenHtml=greenIdx.length?greenIdx.map(function(i){return _excelSettleRowHtml(i,1);}).join(''):'<div style="text-align:center;color:#9ca3af;padding:10px 0;font-size:13px;">없음</div>';
+  var yellowHtml=yellowIdx.map(function(i){return _excelSettleRowHtml(i,2);}).join('');
+  var dupHtml=dupIdx.map(function(i){return _excelSettleDupHtml(i);}).join('');
+  var redHtml=redIdx.map(function(i){return _excelSettleRedHtml(i);}).join('');
+  var excludedNote=excludedGreenCnt?'<div style="font-size:12px;color:#9ca3af;margin:2px 0 8px;">제외됨 '+excludedGreenCnt+'개 · <a href="#" onclick="event.preventDefault();_excelSettleRestore()" style="color:#3b82f6;">되돌리기</a></div>':'';
+
+  return (feedback?'<div style="margin-bottom:10px;">'+feedback+'</div>':'')+
+    '<div style="font-weight:700;margin-bottom:8px;">인식 '+_excelSettleRows.length+'행 · <span style="color:#16a34a;">확실 '+greenIdx.length+'개</span> · <span style="color:#92400e;">확인필요 '+yellowIdx.length+'개</span> · <span style="color:#6b7280;">이미처리됨 '+dupIdx.length+'개</span> · <span style="color:#dc2626;">매칭안됨 '+redIdx.length+'개</span></div>'+
+    '<div style="font-size:12px;font-weight:600;color:#16a34a;margin-bottom:2px;">✅ 확실한 매칭 (보관번호 일치)</div>'+
+    '<div style="max-height:200px;overflow-y:auto;margin-bottom:2px;">'+greenHtml+'</div>'+
+    excludedNote+
+    (yellowIdx.length?'<div style="font-size:12px;font-weight:600;color:#92400e;margin:8px 0 2px;">⚠️ 확인 필요 (품번+사이즈 매칭, FIFO 1개) — 확인 후 승인해주세요</div>'+
+      '<div style="max-height:200px;overflow-y:auto;margin-bottom:2px;background:#fffbeb;border-radius:8px;padding:0 8px;">'+yellowHtml+'</div>':'')+
+    (dupIdx.length?'<div style="font-size:12px;font-weight:600;color:#6b7280;margin:8px 0 2px;">🔁 이미 처리됨 (중복) — 자동 건너뜀</div>'+
+      '<div style="max-height:160px;overflow-y:auto;margin-bottom:2px;background:#f8f9fa;border-radius:8px;padding:0 8px;">'+dupHtml+'</div>':'')+
+    (redIdx.length?'<div style="font-size:12px;font-weight:600;color:#dc2626;margin:8px 0 2px;">❌ 매칭 안 됨</div>'+
+      '<div style="max-height:200px;overflow-y:auto;margin-bottom:10px;background:#fef2f2;border-radius:8px;">'+redHtml+'</div>':'<div style="margin-bottom:10px;"></div>')+
+    '<div style="display:flex;gap:8px;">'+
+      '<button type="button" class="sb" style="flex:1;background:#6b7280;" onclick="_excelSettlePickerMode=true;_excelSettleRows=[];_renderExcelSettleModal()">다시 업로드</button>'+
+      (totalInclude?'<button type="button" class="sb" style="flex:2;background:#ef4444;" onclick="confirmExcelSettleApply()">📊 정산 처리 ('+totalInclude+'개)</button>':'')+
+    '</div>';
+}
+
+// 정산 반영 실제 DB 처리. CSV 1행 = 재고 1개 판매(sellQty=1)로 확정.
+// performSell과 달리 storage_no·tracking_no를 새 row(부분판매 분리 시)에도 그대로 이어서 저장한다.
+async function performExcelSettleSell(item,sp,st,sd,trackingNo){
+  var prevSold=item.sold_quantity||0;
+  var totalQty=item.quantity||1;
+  var sellQty=1;
+  if(prevSold+sellQty>totalQty)return{error:'수량 초과 (이미 전량 판매됨)'};
+  var fee=computeFee(sp,sellQty,st);
+  var fillTracking=(trackingNo&&!item.tracking_no)?trackingNo:null;
+
+  if(prevSold===0&&sellQty===totalQty){
+    var updateData={status:'판매완료',sell_price:sp,fee:fee,sell_date:sd,sold_quantity:sellQty};
+    if(fillTracking)updateData.tracking_no=fillTracking;
+    var res=await sb.from('items').update(updateData).eq('id',item.id);
+    return res.error?{error:res.error.message}:{};
+  }
+
+  var ins=await sb.from('items').insert([{
+    name:item.name,brand:item.brand,category:item.category,size:item.size,
+    product_code:item.product_code,source:item.source,platform:item.platform,
+    buy_price:item.buy_price,buy_date:item.buy_date,note:item.note,order_url:item.order_url,
+    storage_no:item.storage_no,tracking_no:fillTracking||item.tracking_no||null,
+    quantity:sellQty,sold_quantity:sellQty,
+    sell_price:sp,fee:fee,sell_date:sd,status:'판매완료'
+  }]);
+  if(ins.error)return{error:ins.error.message};
+  var upd=await sb.from('items').update({quantity:totalQty-sellQty}).eq('id',item.id);
+  return upd.error?{error:upd.error.message}:{};
+}
+
+async function confirmExcelSettleApply(){
+  if(!sb){alert('설정 탭에서 Supabase 키를 먼저 입력해주세요.');return;}
+  var toApply=_excelSettleRows.filter(function(r){
+    return r.matched&&((r.matchTier===1&&!r.excluded)||(r.matchTier===2&&r.approved));
+  });
+  if(!toApply.length){alert('처리할 항목이 없습니다.');return;}
+  if(!confirm(toApply.length+'개 항목을 판매완료로 처리하고 정산금액을 반영할까요?'))return;
+  document.getElementById('excelSettleBody').innerHTML='<div id="_esProg" style="text-align:center;color:#6b7280;padding:20px 0;">처리 중... (0/'+toApply.length+')</div>';
+  var okCnt=0,errMsgs=[];
+  for(var i=0;i<toApply.length;i++){
+    var r=toApply[i];
+    var prog=document.getElementById('_esProg');
+    if(prog)prog.textContent='처리 중... ('+(i+1)+'/'+toApply.length+')';
+    var sp=r.sellPrice||(r.matched.status==='정산대기'?(r.matched.sell_price||0):0);
+    if(!sp){errMsgs.push((r.name||r.orderNo||('행 '+(i+1)))+': 판매가 없음, 건너뜀');continue;}
+    var sd=r.sellDate||kstToday();
+    var result=await performExcelSettleSell(r.matched,sp,r.settleAmount,sd,r.trackingNo);
+    if(result.error){errMsgs.push((r.name||r.orderNo)+': '+result.error);continue;}
+    okCnt++;
+  }
+  _excelSettleRows=[];
+  _excelSettlePickerMode=true;
+  document.getElementById('excelSettleModal').style.display='none';
+  await load();
+  var msg='✅ '+okCnt+'개 정산 처리 완료';
+  if(errMsgs.length)msg+='\n⚠️ '+errMsgs.length+'건 오류: '+errMsgs.slice(0,3).join(' / ');
+  alert(msg);
+}
+// ────────────────────────────────────────────────────────
 
 // ── 주문내역 캡처 등록 ────────────────────────────────────
 var _orderItems=[],_orderPendingImages=[],_orderPickerMode=false;
