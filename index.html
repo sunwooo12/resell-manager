@@ -203,6 +203,7 @@ button.dfb.on{background:#1a1a1a;color:#fff;border-color:#1a1a1a;}
       <div style="margin-left:auto;display:flex;flex-direction:column;gap:6px;align-items:stretch;">
         <div style="display:flex;gap:6px;">
           <button class="ab" style="margin-left:0;background:#0ea5e9;flex:1;white-space:nowrap;" onclick="openExcelSettleModal()">📊 엑셀 정산</button>
+          <button class="ab" style="margin-left:0;background:#0ea5e9;flex:1;white-space:nowrap;" onclick="openExcelShipModal()">📦 엑셀 발송</button>
           <button class="ab" style="margin-left:0;flex:1;white-space:nowrap;" onclick="go(1)">+ 매입 등록</button>
         </div>
         <div style="position:relative;">
@@ -211,7 +212,6 @@ button.dfb.on{background:#1a1a1a;color:#fff;border-color:#1a1a1a;}
             <button class="scanMenuItem" onclick="closeScanMenu();openOrderPicker()">🛒 주문 등록</button>
             <button class="scanMenuItem" onclick="closeScanMenu();openScanPicker()">📥 입고</button>
             <button class="scanMenuItem" onclick="closeScanMenu();openShipScanModal()">📦 발송</button>
-            <button class="scanMenuItem" onclick="closeScanMenu();openExcelShipModal()">📦 엑셀 발송</button>
             <button class="scanMenuItem" onclick="closeScanMenu();openSellCapture()">💰 판매완료</button>
             <button class="scanMenuItem" onclick="closeScanMenu();openKreamNotiModal()">📩 판매알림 붙여넣기</button>
           </div>
