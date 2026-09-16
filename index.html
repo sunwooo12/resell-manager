@@ -4376,7 +4376,41 @@ function _exShipAlreadyDone(it,trackingNo){
   return _storageNoNorm(it.tracking_no)===_storageNoNorm(trackingNo);
 }
 
-// 매칭 우선순위: 1) 보관번호(주문번호) 정확 매칭(고유·확실) → 2) 실패 시에만 품번+사이즈로 FIFO(가장 오래된 재고) 1개만(확인 필요).
+// 송장번호 매칭용 후보 풀: 발송완료 + 같은 송장번호 + 보관번호 아직 비어있는 항목만
+// (묶음발송은 송장번호가 전부 동일하므로, 이미 발송완료+송장번호는 있지만 보관번호만 비어있는
+//  재고를 이 엑셀 행으로 정확히 채우기 위한 매칭 — 다른 방식으로 이미 보관번호가 채워진 항목은 건드리지 않음)
+function _exShipTrackingCandidates(trackingNo,usedIds){
+  var tn=_storageNoNorm(trackingNo);
+  if(!tn)return [];
+  return items.filter(function(it){
+    if(it.status!=='발송완료')return false;
+    if(usedIds.indexOf(it.id)!==-1)return false;
+    if(it.storage_no)return false;
+    if(_storageNoNorm(it.tracking_no||'')!==tn)return false;
+    return true;
+  });
+}
+// 같은 송장번호(묶음) 안에서: 1) 품번+사이즈 일치 → 확실(초록), 2) 상품명 유사매칭 → 확인필요(노랑)
+function _exShipFindTrackingMatch(row,usedIds){
+  var cands=_exShipTrackingCandidates(row.trackingNo,usedIds);
+  if(!cands.length)return null;
+  if(row.code){
+    var nc=normCode(row.code),ns=normSize(row.size);
+    var codeCands=cands.filter(function(it){
+      if(normCode(it.product_code||'')!==nc)return false;
+      if(ns&&normSize(it.size||'')!==ns)return false;
+      return true;
+    });
+    codeCands=fifoSort(codeCands);
+    if(codeCands.length)return{item:codeCands[0],tier:1,reason:'tracking_code'};
+  }
+  var nameCands=fifoSort(cands.filter(function(it){return _shipNameFuzzyMatch(it,row);}));
+  if(nameCands.length)return{item:nameCands[0],tier:2,reason:'tracking_name'};
+  return null;
+}
+
+// 매칭 우선순위: 1) 보관번호(주문번호) 정확 매칭(고유·확실) → 2) 같은 송장번호(묶음) 안에서 품번+사이즈/상품명 매칭
+// → 3) 실패 시에만 전체 재고에서 품번+사이즈로 FIFO(가장 오래된 재고) 1개만(확인 필요).
 function _buildExcelShipRows(rawRows){
   var usedIds=[];
   _excelShipRows=rawRows.map(function(r){
@@ -4390,7 +4424,7 @@ function _buildExcelShipRows(rawRows){
     var processedAt=_excelDateNorm(_excelCol(r,'처리일시'))||_excelDateNorm(_excelCol(r,'거래일시'));
     var row={
       orderNo:orderNo,code:code,prodNo:prodNo,name:name,size:size,trackingNo:trackingNo,statusText:statusText,processedAt:processedAt,
-      matched:null,matchTier:null,isDuplicate:false,duplicateOf:null,approved:false,excluded:false
+      matched:null,matchTier:null,matchReason:null,isDuplicate:false,duplicateOf:null,approved:false,excluded:false
     };
     if(!orderNo&&!code)return row;
 
@@ -4403,6 +4437,13 @@ function _buildExcelShipRows(rawRows){
         if(_exShipAlreadyDone(exact,trackingNo)){row.isDuplicate=true;row.duplicateOf=exact;return row;}
         row.matched=exact;row.matchTier=1;usedIds.push(exact.id);return row;
       }
+    }
+
+    var trackMatch=_exShipFindTrackingMatch(row,usedIds);
+    if(trackMatch){
+      row.matched=trackMatch.item;row.matchTier=trackMatch.tier;row.matchReason=trackMatch.reason;
+      usedIds.push(trackMatch.item.id);
+      return row;
     }
 
     if(code){
@@ -4462,9 +4503,14 @@ function _excelShipRowHtml(i,tier){
   var actionCtrl=tier===1
     ?'<button type="button" onclick="_excelShipExclude('+i+')" title="제외" style="background:none;border:none;cursor:pointer;font-size:20px;color:#9ca3af;line-height:1;flex-shrink:0;padding:0 4px;">×</button>'
     :'<label style="display:flex;align-items:center;flex-shrink:0;padding:0 4px;cursor:pointer;"><input type="checkbox" '+(r.approved?'checked':'')+' onchange="_excelShipToggleApprove('+i+',this.checked)" style="width:17px;height:17px;margin:0;cursor:pointer;"></label>';
-  var reasonNote=tier===2
-    ?'<div style="font-size:11px;color:#92400e;margin-top:2px;">보관번호 불일치 — 품번+사이즈로 매칭 (가장 오래된 재고 1개, FIFO)</div>'
-    :'';
+  var reasonNote='';
+  if(r.matchReason==='tracking_code'){
+    reasonNote='<div style="font-size:11px;color:#0d9488;margin-top:2px;">🔖 같은 송장번호(묶음) 안에서 품번+사이즈 일치 — 보관번호만 채움</div>';
+  }else if(r.matchReason==='tracking_name'){
+    reasonNote='<div style="font-size:11px;color:#92400e;margin-top:2px;">🔖 같은 송장번호(묶음) 안에서 상품명 유사매칭 — 확인 필요</div>';
+  }else if(tier===2){
+    reasonNote='<div style="font-size:11px;color:#92400e;margin-top:2px;">보관번호 불일치 — 품번+사이즈로 매칭 (가장 오래된 재고 1개, FIFO)</div>';
+  }
   return '<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #f0f0f0;">'+
     '<span style="flex:1;min-width:0;">'+
       '<b>'+_esc(dedupeName(it.name,it.brand))+(it.size?' ('+_esc(it.size)+')':'')+'</b>'+actionBadge+
