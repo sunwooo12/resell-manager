@@ -4326,11 +4326,12 @@ async function confirmExcelSettleApply(){
 // ── 엑셀 발송 (넘버원셀러 발송내역 엑셀 업로드 → 발송완료 전환 + 보관번호·송장번호 일괄 저장) ──
 // 발송 스캔(캡처) 대체용: 넘버원셀러가 내려주는 "발송내역" 엑셀의 주문번호를 보관번호와 매칭해
 // 주문완료/보유중 항목은 발송완료로 전환하고, 이미 발송완료인 항목은 보관번호·송장번호만 채운다.
-var _excelShipRows=[],_excelShipPickerMode=false;
+var _excelShipRows=[],_excelShipPickerMode=false,_excelShipManualUI=null;
 
 function openExcelShipModal(){
   _excelShipRows=[];
   _excelShipPickerMode=true;
+  _excelShipManualUI=null;
   document.getElementById('excelShipModal').style.display='flex';
   _renderExcelShipModal();
 }
@@ -4341,6 +4342,7 @@ function _handleCloseExcelShip(){
   if(_excelShipRows.length&&!confirm('아직 처리 안 된 발송 내역이 있어요. 닫을까요?'))return;
   _excelShipRows=[];
   _excelShipPickerMode=false;
+  _excelShipManualUI=null;
   closeExcelShipModal();
 }
 
@@ -4352,8 +4354,79 @@ function _showExcelShipPickerUI(){
   document.getElementById('excelShipBody').innerHTML=_excelShipPickerBody();
 }
 function _renderExcelShipModal(feedback){
+  if(_excelShipManualUI){
+    document.getElementById('excelShipBody').innerHTML=_excelShipManualLinkBody();
+    return;
+  }
   if(_excelShipPickerMode){_showExcelShipPickerUI();return;}
   document.getElementById('excelShipBody').innerHTML=_excelShipReviewBody(feedback);
+}
+
+// ── 매칭 안 됨 항목 수동 연결 ─────────────────────────────
+// 범위를 반드시 "같은 송장번호 + 아직 보관번호 없는 발송완료 재고"로만 좁혀서, 엉뚱한 재고가
+// 뜨지 않게 하고 중복 연결도 막는다(이미 다른 행에 연결된 재고는 후보에서 아예 제외).
+function openExcelShipManualLink(i){
+  _excelShipManualUI={rowIndex:i};
+  _renderExcelShipModal();
+}
+function closeExcelShipManualUI(){
+  _excelShipManualUI=null;
+  _renderExcelShipModal();
+}
+function cancelExcelShipManualLink(i){
+  var r=_excelShipRows[i];
+  r.matched=null;r.matchTier=null;r.matchReason=null;
+  _renderExcelShipModal();
+}
+function _excelShipManualCandidates(rowIndex){
+  var row=_excelShipRows[rowIndex];
+  var tn=_storageNoNorm(row.trackingNo);
+  if(!tn)return [];
+  var usedElsewhere=_excelShipRows.filter(function(r,idx){return idx!==rowIndex&&r.matched;}).map(function(r){return r.matched.id;});
+  return fifoSort(items.filter(function(it){
+    if(it.status!=='발송완료')return false;
+    if(it.storage_no)return false; // 이미 보관번호 채워진 재고는 제외(중복 방지)
+    if(usedElsewhere.indexOf(it.id)!==-1)return false; // 이미 다른 행에 연결된 재고 제외(중복 방지)
+    return _storageNoNorm(it.tracking_no||'')===tn;
+  }));
+}
+function pickExcelShipManualLink(rowIndex,itemId){
+  var it=items.find(function(x){return String(x.id)===String(itemId);});
+  if(!it)return;
+  // 재확인(레이스 방지): 그 사이 다른 곳에서 이미 연결/저장됐으면 취소
+  var alreadyUsed=it.storage_no||_excelShipRows.some(function(r,idx){return idx!==rowIndex&&r.matched&&r.matched.id===it.id;});
+  if(alreadyUsed){
+    alert('이미 다른 항목에 연결된 재고예요. 목록을 새로고침했어요.');
+    _renderExcelShipModal();
+    return;
+  }
+  var row=_excelShipRows[rowIndex];
+  row.matched=it;row.matchTier='manual';row.matchReason='manual';
+  _excelShipManualUI=null;
+  _renderExcelShipModal();
+}
+function _excelShipManualLinkBody(){
+  var st=_excelShipManualUI;
+  var r=_excelShipRows[st.rowIndex];
+  var header='<div style="font-weight:700;margin-bottom:8px;">"'+_esc(r.name||r.code||'(상품명 미인식)')+'" 연결할 재고 선택</div>'+
+    '<div style="font-size:11px;color:#9ca3af;margin-bottom:10px;word-break:break-all;">주문번호: '+_esc(r.orderNo||'-')+' · 송장번호: '+_esc(r.trackingNo||'-')+
+      (r.code?' · 인식 품번: '+_esc(r.code):'')+(r.size?' · 인식 사이즈: '+_esc(r.size):'')+'</div>';
+  if(!r.trackingNo){
+    return header+'<p style="font-size:12px;color:#d97706;margin-bottom:10px;">이 행에는 송장번호가 없어서 직접 연결할 후보를 좁힐 수 없어요.</p>'+
+      '<button type="button" class="sb" style="width:100%;background:#6b7280;" onclick="closeExcelShipManualUI()">취소</button>';
+  }
+  var cands=_excelShipManualCandidates(st.rowIndex);
+  var listHtml=cands.length?cands.map(function(it){
+    return '<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid #f0f0f0;">'+
+      '<span style="flex:1;min-width:0;"><b>'+_esc(dedupeName(it.name,it.brand))+(it.size?' ('+_esc(it.size)+')':'')+'</b>'+
+        '<div style="font-size:11px;color:#9ca3af;margin-top:2px;">'+_esc(it.product_code||'품번없음')+' · 매입일 '+_esc(it.buy_date||'-')+'</div></span>'+
+      '<button type="button" onclick="pickExcelShipManualLink('+st.rowIndex+',\''+it.id+'\')" style="background:#16a34a;color:#fff;border:none;border-radius:6px;padding:5px 10px;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0;white-space:nowrap;">연결</button>'+
+    '</div>';
+  }).join(''):'<div style="text-align:center;color:#9ca3af;padding:16px 0;font-size:13px;">같은 송장번호로 보관번호가 비어있는 발송완료 재고가 더 없어요.</div>';
+  return header+
+    '<div style="font-size:11px;color:#6b7280;margin-bottom:8px;">같은 송장번호(묶음)로 발송완료됐고 아직 보관번호가 비어있는 재고만 표시돼요. (이미 다른 행에 연결된 재고는 제외)</div>'+
+    '<div style="max-height:320px;overflow-y:auto;margin-bottom:10px;">'+listHtml+'</div>'+
+    '<button type="button" class="sb" style="width:100%;background:#6b7280;" onclick="closeExcelShipManualUI()">취소</button>';
 }
 
 async function _parseExcelShipFile(file){
@@ -4506,10 +4579,15 @@ function _buildExcelShipRows(rawRows){
   var trackingPending=rows.filter(function(row){return !row.matched&&!row.isDuplicate&&row._hasTrackingGroup&&row.code;});
   _exShipPairTrackingGroups(trackingPending,usedIds,conflicted,markAssigned);
 
-  // 2b) 여전히 못 정해졌지만 송장번호 묶음에는 속한 행 — 묶음 안에서만 상품명 유사매칭(확인 필요)
+  // 2b) 여전히 못 정해졌지만 송장번호 묶음에는 속한 행 — 묶음 안에서만 상품명 유사매칭(확인 필요).
+  // 품번+사이즈와 마찬가지로 "같은 상품명이 여러 개"인 경우도 반드시 1:1(오래된 재고부터 순서대로,
+  // usedIds로 즉시 소진 처리)로만 짝짓는다 — 한 행씩 순서대로 처리하며 이미 쓰인 재고는 후보에서
+  // 자동 제외되므로, 배열을 pop/shift하는 것과 동일한 효과로 중복 배정이 원천 차단된다.
   rows.forEach(function(row){
     if(row.matched||row.isDuplicate||!row._hasTrackingGroup)return;
-    var cands=_exShipTrackingCandidates(row.trackingNo,usedIds);
+    var cands=_exShipTrackingCandidates(row.trackingNo,usedIds).filter(function(it){
+      return _shipSizeMatchOrFree(it.size,row.size); // 사이즈까지 같아야 후보(사이즈 구분 없는 상품은 예외)
+    });
     var nameCands=fifoSort(cands.filter(function(it){return _shipNameFuzzyMatch(it,row);}));
     if(!nameCands.length)return;
     if(conflicted(row.orderNo))return;
@@ -4602,50 +4680,66 @@ function _excelShipDupHtml(i){
 function _excelShipRedHtml(i){
   var r=_excelShipRows[i];
   var groupNote=r._hasTrackingGroup
-    ?'<div style="font-size:11px;color:#dc2626;margin-top:2px;">⚠️ 같은 송장번호 묶음은 있으나, 이 품번+사이즈로 매칭 가능한 재고가 부족해요(엑셀 행 수 &gt; 남은 재고 수) — 억지로 다른 재고에 배정하지 않고 비워뒀어요.</div>'
+    ?'<div style="font-size:11px;color:#dc2626;margin-top:2px;">⚠️ 같은 송장번호 묶음은 있으나, 이 품번+사이즈/상품명으로 매칭 가능한 재고가 부족해요(엑셀 행 수 &gt; 남은 재고 수) — 억지로 다른 재고에 배정하지 않고 비워뒀어요.</div>'
     :'';
   return '<div style="padding:8px 10px;border-bottom:1px solid #fee2e2;font-size:12.5px;">'+
     '<div><span style="color:#dc2626;font-weight:700;">매칭 안 됨</span> — '+_esc(r.name||r.code||'(상품명 없음)')+(r.size?' · 사이즈 '+_esc(r.size):'')+'</div>'+
     '<div style="font-size:11px;color:#9ca3af;margin-top:2px;word-break:break-all;">주문번호: '+_esc(r.orderNo||'-')+' · 품번 '+_esc(r.code||'-')+' · 송장번호 '+_esc(r.trackingNo||'-')+'</div>'+
     groupNote+
+    '<div style="margin-top:6px;"><button type="button" onclick="openExcelShipManualLink('+i+')" style="background:#3b82f6;color:#fff;border:none;border-radius:6px;padding:5px 10px;font-size:12px;font-weight:700;cursor:pointer;">🔗 직접 연결</button></div>'+
+  '</div>';
+}
+function _excelShipManualRowHtml(i){
+  var r=_excelShipRows[i],it=r.matched;
+  return '<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #f0f0f0;">'+
+    '<span style="flex:1;min-width:0;">'+
+      '<b>'+_esc(dedupeName(it.name,it.brand))+(it.size?' ('+_esc(it.size)+')':'')+'</b>'+
+      '<span style="font-size:10px;font-weight:700;color:#7c3aed;background:#ede9fe;border-radius:4px;padding:1px 5px;margin-left:6px;white-space:nowrap;">직접 연결</span>'+
+      '<div style="font-size:11px;color:#6b7280;margin-top:2px;word-break:break-all;">주문번호: <b style="color:#374151;">'+_esc(r.orderNo||'-')+'</b> · 송장번호: <b style="color:#374151;">'+_esc(r.trackingNo||'-')+'</b> · 매입일: <b style="color:#374151;">'+_esc(it.buy_date||'-')+'</b></div>'+
+    '</span>'+
+    '<button type="button" onclick="cancelExcelShipManualLink('+i+')" title="연결 취소" style="background:none;border:none;cursor:pointer;font-size:20px;color:#9ca3af;line-height:1;flex-shrink:0;padding:0 4px;">×</button>'+
   '</div>';
 }
 
 function _excelShipReviewBody(feedback){
-  var greenIdx=[],yellowIdx=[],dupIdx=[],redIdx=[];
+  var greenIdx=[],yellowIdx=[],manualIdx=[],dupIdx=[],redIdx=[];
   _excelShipRows.forEach(function(r,i){
     if(r.isDuplicate)dupIdx.push(i);
     else if(r.matchTier===1)greenIdx.push(i);
     else if(r.matchTier===2)yellowIdx.push(i);
+    else if(r.matchTier==='manual')manualIdx.push(i);
     else redIdx.push(i);
   });
   var includedGreen=greenIdx.filter(function(i){return !_excelShipRows[i].excluded;});
   var includedYellow=yellowIdx.filter(function(i){return _excelShipRows[i].approved;});
   var excludedGreenCnt=greenIdx.length-includedGreen.length;
-  var totalInclude=includedGreen.length+includedYellow.length;
+  var totalInclude=includedGreen.length+includedYellow.length+manualIdx.length;
   var allYellowApproved=yellowIdx.length>0&&yellowIdx.every(function(i){return _excelShipRows[i].approved;});
 
   var greenHtml=greenIdx.length?greenIdx.map(function(i){return _excelShipRowHtml(i,1);}).join(''):'<div style="text-align:center;color:#9ca3af;padding:10px 0;font-size:13px;">없음</div>';
   var yellowHtml=yellowIdx.map(function(i){return _excelShipRowHtml(i,2);}).join('');
+  var manualHtml=manualIdx.map(function(i){return _excelShipManualRowHtml(i);}).join('');
   var dupHtml=dupIdx.map(function(i){return _excelShipDupHtml(i);}).join('');
   var redHtml=redIdx.map(function(i){return _excelShipRedHtml(i);}).join('');
   var excludedNote=excludedGreenCnt?'<div style="font-size:12px;color:#9ca3af;margin:2px 0 8px;">제외됨 '+excludedGreenCnt+'개 · <a href="#" onclick="event.preventDefault();_excelShipRestore()" style="color:#3b82f6;">되돌리기</a></div>':'';
   var yellowHeader=yellowIdx.length?'<div style="display:flex;align-items:center;justify-content:space-between;margin:8px 0 2px;">'+
-      '<span style="font-size:12px;font-weight:600;color:#92400e;">⚠️ 확인 필요 (품번+사이즈 매칭, FIFO 1개) — 확인 후 체크해주세요</span>'+
+      '<span style="font-size:12px;font-weight:600;color:#92400e;">⚠️ 확인 필요 (품번+사이즈/상품명 매칭, FIFO 1개) — 확인 후 체크해주세요</span>'+
       '<button type="button" onclick="_excelShipSelectAllYellow('+(!allYellowApproved)+')" style="background:none;border:none;color:#3b82f6;font-size:11px;cursor:pointer;text-decoration:underline;flex-shrink:0;">'+(allYellowApproved?'전체 해제':'전체 선택')+'</button>'+
     '</div>':'';
 
   return (feedback?'<div style="margin-bottom:10px;">'+feedback+'</div>':'')+
-    '<div style="font-weight:700;margin-bottom:8px;">인식 '+_excelShipRows.length+'행 · <span style="color:#16a34a;">확실 '+greenIdx.length+'개</span> · <span style="color:#92400e;">확인필요 '+yellowIdx.length+'개</span> · <span style="color:#6b7280;">이미처리됨 '+dupIdx.length+'개</span> · <span style="color:#dc2626;">매칭안됨 '+redIdx.length+'개</span></div>'+
+    '<div style="font-weight:700;margin-bottom:8px;">인식 '+_excelShipRows.length+'행 · <span style="color:#16a34a;">확실 '+greenIdx.length+'개</span> · <span style="color:#92400e;">확인필요 '+yellowIdx.length+'개</span> · <span style="color:#7c3aed;">직접연결 '+manualIdx.length+'개</span> · <span style="color:#6b7280;">이미처리됨 '+dupIdx.length+'개</span> · <span style="color:#dc2626;">매칭안됨 '+redIdx.length+'개</span></div>'+
     '<div style="font-size:12px;font-weight:600;color:#16a34a;margin-bottom:2px;">✅ 확실한 매칭 (보관번호 일치)</div>'+
     '<div style="max-height:200px;overflow-y:auto;margin-bottom:2px;">'+greenHtml+'</div>'+
     excludedNote+
     (yellowIdx.length?yellowHeader+
       '<div style="max-height:200px;overflow-y:auto;margin-bottom:2px;background:#fffbeb;border-radius:8px;padding:0 8px;">'+yellowHtml+'</div>':'')+
+    (manualIdx.length?'<div style="font-size:12px;font-weight:600;color:#7c3aed;margin:8px 0 2px;">🔗 직접 연결</div>'+
+      '<div style="max-height:200px;overflow-y:auto;margin-bottom:2px;background:#f5f3ff;border-radius:8px;padding:0 8px;">'+manualHtml+'</div>':'')+
     (dupIdx.length?'<div style="font-size:12px;font-weight:600;color:#6b7280;margin:8px 0 2px;">🔁 이미 처리됨 (중복) — 자동 건너뜀</div>'+
       '<div style="max-height:160px;overflow-y:auto;margin-bottom:2px;background:#f8f9fa;border-radius:8px;padding:0 8px;">'+dupHtml+'</div>':'')+
-    (redIdx.length?'<div style="font-size:12px;font-weight:600;color:#dc2626;margin:8px 0 2px;">❌ 매칭 안 됨</div>'+
-      '<div style="max-height:200px;overflow-y:auto;margin-bottom:10px;background:#fef2f2;border-radius:8px;">'+redHtml+'</div>':'<div style="margin-bottom:10px;"></div>')+
+    (redIdx.length?'<div style="font-size:12px;font-weight:600;color:#dc2626;margin:8px 0 2px;">❌ 매칭 안 됨 — 직접 연결할 수 있어요</div>'+
+      '<div style="max-height:220px;overflow-y:auto;margin-bottom:10px;background:#fef2f2;border-radius:8px;">'+redHtml+'</div>':'<div style="margin-bottom:10px;"></div>')+
     '<div style="display:flex;gap:8px;">'+
       '<button type="button" class="sb" style="flex:1;background:#6b7280;" onclick="_excelShipPickerMode=true;_excelShipRows=[];_renderExcelShipModal()">다시 업로드</button>'+
       (totalInclude?'<button type="button" class="sb" style="flex:2;background:#ef4444;" onclick="confirmExcelShipDispatch()">📦 발송 처리 ('+totalInclude+'개)</button>':'')+
@@ -4668,7 +4762,7 @@ async function performExcelShipRow(item,storageNo,trackingNo,shipDate){
 async function confirmExcelShipDispatch(){
   if(!sb){alert('설정 탭에서 Supabase 키를 먼저 입력해주세요.');return;}
   var toApply=_excelShipRows.filter(function(r){
-    return r.matched&&((r.matchTier===1&&!r.excluded)||(r.matchTier===2&&r.approved));
+    return r.matched&&((r.matchTier===1&&!r.excluded)||(r.matchTier===2&&r.approved)||r.matchTier==='manual');
   });
   if(!toApply.length){alert('처리할 항목이 없습니다.');return;}
   var convertCnt=toApply.filter(function(r){return r.matched.status==='주문완료'||r.matched.status==='보유중';}).length;
