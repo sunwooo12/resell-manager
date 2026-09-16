@@ -211,6 +211,7 @@ button.dfb.on{background:#1a1a1a;color:#fff;border-color:#1a1a1a;}
             <button class="scanMenuItem" onclick="closeScanMenu();openOrderPicker()">🛒 주문 등록</button>
             <button class="scanMenuItem" onclick="closeScanMenu();openScanPicker()">📥 입고</button>
             <button class="scanMenuItem" onclick="closeScanMenu();openShipScanModal()">📦 발송</button>
+            <button class="scanMenuItem" onclick="closeScanMenu();openExcelShipModal()">📦 엑셀 발송</button>
             <button class="scanMenuItem" onclick="closeScanMenu();openSellCapture()">💰 판매완료</button>
             <button class="scanMenuItem" onclick="closeScanMenu();openKreamNotiModal()">📩 판매알림 붙여넣기</button>
           </div>
@@ -326,6 +327,16 @@ button.dfb.on{background:#1a1a1a;color:#fff;border-color:#1a1a1a;}
     </div>
   </div>
   <input type="file" id="excelSettleFile" accept=".csv,.xlsx,.xls" style="display:none;" onchange="runExcelSettleFile(this)">
+
+  <!-- 엑셀 발송 모달 -->
+  <div id="excelShipModal" class="modal-bg" style="display:none;" onclick="if(event.target===this)_handleCloseExcelShip()">
+    <div class="modal-box" style="width:min(640px,96vw);">
+      <div class="modal-title">📦 엑셀 발송</div>
+      <div id="excelShipBody" style="font-size:13px;line-height:1.6;"></div>
+      <button class="cb" style="margin-top:10px;width:100%;" onclick="_handleCloseExcelShip()">닫기</button>
+    </div>
+  </div>
+  <input type="file" id="excelShipFile" accept=".xlsx,.xls" style="display:none;" onchange="runExcelShipFile(this)">
 
   <!-- 발송 스캔 모달 -->
   <div id="shipScanModal" class="modal-bg" style="display:none;" onclick="if(event.target===this)closeShipScanModal()">
@@ -4307,6 +4318,256 @@ async function confirmExcelSettleApply(){
   document.getElementById('excelSettleModal').style.display='none';
   await load();
   var msg='✅ '+okCnt+'개 정산 처리 완료';
+  if(errMsgs.length)msg+='\n⚠️ '+errMsgs.length+'건 오류: '+errMsgs.slice(0,3).join(' / ');
+  alert(msg);
+}
+// ────────────────────────────────────────────────────────
+
+// ── 엑셀 발송 (넘버원셀러 발송내역 엑셀 업로드 → 발송완료 전환 + 보관번호·송장번호 일괄 저장) ──
+// 발송 스캔(캡처) 대체용: 넘버원셀러가 내려주는 "발송내역" 엑셀의 주문번호를 보관번호와 매칭해
+// 주문완료/보유중 항목은 발송완료로 전환하고, 이미 발송완료인 항목은 보관번호·송장번호만 채운다.
+var _excelShipRows=[],_excelShipPickerMode=false;
+
+function openExcelShipModal(){
+  _excelShipRows=[];
+  _excelShipPickerMode=true;
+  document.getElementById('excelShipModal').style.display='flex';
+  _renderExcelShipModal();
+}
+function closeExcelShipModal(){
+  document.getElementById('excelShipModal').style.display='none';
+}
+function _handleCloseExcelShip(){
+  if(_excelShipRows.length&&!confirm('아직 처리 안 된 발송 내역이 있어요. 닫을까요?'))return;
+  _excelShipRows=[];
+  _excelShipPickerMode=false;
+  closeExcelShipModal();
+}
+
+function _excelShipPickerBody(){
+  return '<p style="font-size:12px;color:#6b7280;margin-bottom:10px;">넘버원셀러 <b>발송내역</b> 엑셀(xlsx)을 업로드하면, 파일의 <b>주문번호</b>를 재고의 <b>보관번호</b>와 매칭해 발송완료 처리 + 보관번호·송장번호를 한 번에 반영해요. 주문완료·보유중 상태는 바로 발송완료로 전환되고, 이미 발송완료인 항목은 번호만 채워요.</p>'+
+    '<button type="button" class="sb" style="width:100%;background:#0ea5e9;" onclick="document.getElementById(\'excelShipFile\').click()">🗂 엑셀 파일 선택</button>';
+}
+function _showExcelShipPickerUI(){
+  document.getElementById('excelShipBody').innerHTML=_excelShipPickerBody();
+}
+function _renderExcelShipModal(feedback){
+  if(_excelShipPickerMode){_showExcelShipPickerUI();return;}
+  document.getElementById('excelShipBody').innerHTML=_excelShipReviewBody(feedback);
+}
+
+async function _parseExcelShipFile(file){
+  if(typeof XLSX==='undefined')throw new Error('엑셀 파싱 라이브러리를 불러오지 못했습니다.');
+  var buf=await _readFileAsArrayBuffer(file);
+  var wb=XLSX.read(buf,{type:'array'});
+  var sheetName=wb.SheetNames.indexOf('발송내역')!==-1?'발송내역':wb.SheetNames[0];
+  var sheet=wb.Sheets[sheetName];
+  return XLSX.utils.sheet_to_json(sheet,{defval:'',raw:false});
+}
+
+// 매칭 대상: 주문완료·보유중·발송완료 모두 후보 — 아직 발송 전이면 바로 발송완료로 점프시키기 위함.
+function _exShipCandidateStatusOk(it){
+  return it.status==='주문완료'||it.status==='보유중'||it.status==='발송완료';
+}
+// 이미 같은 송장번호까지 저장돼 있으면(=예전에 이미 이 엑셀/스캔으로 처리됨) 중복으로 보고 건너뜀
+function _exShipAlreadyDone(it,trackingNo){
+  if(it.status!=='발송완료'||!it.tracking_no)return false;
+  if(!trackingNo)return true;
+  return _storageNoNorm(it.tracking_no)===_storageNoNorm(trackingNo);
+}
+
+// 매칭 우선순위: 1) 보관번호(주문번호) 정확 매칭(고유·확실) → 2) 실패 시에만 품번+사이즈로 FIFO(가장 오래된 재고) 1개만(확인 필요).
+function _buildExcelShipRows(rawRows){
+  var usedIds=[];
+  _excelShipRows=rawRows.map(function(r){
+    var orderNo=String(_excelCol(r,'주문번호')||'').trim();
+    var code=String(_excelCol(r,'품번')||'').trim();
+    var prodNo=String(_excelCol(r,'상품번호')||'').trim();
+    var name=String(_excelCol(r,'제품명')||'').trim();
+    var size=String(_excelCol(r,'사이즈')||'').trim();
+    var trackingNo=String(_excelCol(r,'송장번호')||'').trim();
+    var statusText=String(_excelCol(r,'상태')||'').trim();
+    var processedAt=_excelDateNorm(_excelCol(r,'처리일시'))||_excelDateNorm(_excelCol(r,'거래일시'));
+    var row={
+      orderNo:orderNo,code:code,prodNo:prodNo,name:name,size:size,trackingNo:trackingNo,statusText:statusText,processedAt:processedAt,
+      matched:null,matchTier:null,isDuplicate:false,duplicateOf:null,approved:false,excluded:false
+    };
+    if(!orderNo&&!code)return row;
+
+    var sn=_storageNoNorm(orderNo);
+    if(sn){
+      var exact=items.find(function(it){
+        return _exShipCandidateStatusOk(it)&&_storageNoNorm(it.storage_no)===sn&&usedIds.indexOf(it.id)===-1;
+      });
+      if(exact){
+        if(_exShipAlreadyDone(exact,trackingNo)){row.isDuplicate=true;row.duplicateOf=exact;return row;}
+        row.matched=exact;row.matchTier=1;usedIds.push(exact.id);return row;
+      }
+    }
+
+    if(code){
+      var nc=normCode(code),ns=normSize(size);
+      var cands=items.filter(function(it){
+        if(!_exShipCandidateStatusOk(it))return false;
+        if(usedIds.indexOf(it.id)!==-1)return false;
+        if(normCode(it.product_code||'')!==nc)return false;
+        if(ns&&normSize(it.size||'')!==ns)return false;
+        return true;
+      });
+      cands=fifoSort(cands);
+      if(cands.length){
+        var picked=cands[0];
+        if(_exShipAlreadyDone(picked,trackingNo)){row.isDuplicate=true;row.duplicateOf=picked;return row;}
+        row.matched=picked;row.matchTier=2;usedIds.push(picked.id);return row;
+      }
+    }
+    return row;
+  });
+}
+
+async function runExcelShipFile(input){
+  if(!input.files||!input.files[0])return;
+  var file=input.files[0];
+  input.value='';
+  document.getElementById('excelShipBody').innerHTML='<div style="text-align:center;color:#6b7280;padding:24px 0;">📦 파일 분석 중...</div>';
+  try{
+    var rawRows=await _parseExcelShipFile(file);
+    if(!rawRows.length){
+      document.getElementById('excelShipBody').innerHTML='<p style="color:#d97706;font-weight:700;">⚠️ 파일에서 데이터를 읽지 못했습니다.</p>'+
+        '<button type="button" class="sb" style="width:100%;margin-top:10px;" onclick="_excelShipPickerMode=true;_renderExcelShipModal()">다시 시도</button>';
+      return;
+    }
+    _buildExcelShipRows(rawRows);
+    _excelShipPickerMode=false;
+    _renderExcelShipModal();
+  }catch(e){
+    document.getElementById('excelShipBody').innerHTML='<p style="color:#dc2626;">❌ 오류: '+_esc(e.message)+'</p>'+
+      '<button type="button" class="sb" style="width:100%;margin-top:10px;" onclick="_excelShipPickerMode=true;_renderExcelShipModal()">다시 시도</button>';
+  }
+}
+
+function _excelShipExclude(i){_excelShipRows[i].excluded=true;_renderExcelShipModal();}
+function _excelShipRestore(){_excelShipRows.forEach(function(r){r.excluded=false;});_renderExcelShipModal();}
+function _excelShipToggleApprove(i,checked){_excelShipRows[i].approved=!!checked;_renderExcelShipModal();}
+function _excelShipSelectAllYellow(select){
+  _excelShipRows.forEach(function(r){if(r.matchTier===2)r.approved=!!select;});
+  _renderExcelShipModal();
+}
+
+function _excelShipRowHtml(i,tier){
+  var r=_excelShipRows[i],it=r.matched;
+  var actionBadge=it.status==='발송완료'
+    ?'<span style="font-size:10px;font-weight:700;color:#2563eb;background:#dbeafe;border-radius:4px;padding:1px 5px;margin-left:6px;white-space:nowrap;">번호만 채움 (이미 발송완료)</span>'
+    :'<span style="font-size:10px;font-weight:700;color:#16a34a;background:#dcfce7;border-radius:4px;padding:1px 5px;margin-left:6px;white-space:nowrap;">상태전환 ('+_esc(it.status)+'→발송완료)</span>';
+  var actionCtrl=tier===1
+    ?'<button type="button" onclick="_excelShipExclude('+i+')" title="제외" style="background:none;border:none;cursor:pointer;font-size:20px;color:#9ca3af;line-height:1;flex-shrink:0;padding:0 4px;">×</button>'
+    :'<label style="display:flex;align-items:center;flex-shrink:0;padding:0 4px;cursor:pointer;"><input type="checkbox" '+(r.approved?'checked':'')+' onchange="_excelShipToggleApprove('+i+',this.checked)" style="width:17px;height:17px;margin:0;cursor:pointer;"></label>';
+  var reasonNote=tier===2
+    ?'<div style="font-size:11px;color:#92400e;margin-top:2px;">보관번호 불일치 — 품번+사이즈로 매칭 (가장 오래된 재고 1개, FIFO)</div>'
+    :'';
+  return '<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #f0f0f0;">'+
+    '<span style="flex:1;min-width:0;">'+
+      '<b>'+_esc(dedupeName(it.name,it.brand))+(it.size?' ('+_esc(it.size)+')':'')+'</b>'+actionBadge+
+      '<div style="font-size:11px;color:#6b7280;margin-top:2px;word-break:break-all;">주문번호: <b style="color:#374151;">'+_esc(r.orderNo||'-')+'</b> · 송장번호: <b style="color:#374151;">'+_esc(r.trackingNo||'-')+'</b>'+(r.processedAt?' · '+_esc(r.processedAt):'')+'</div>'+
+      reasonNote+
+    '</span>'+actionCtrl+
+  '</div>';
+}
+function _excelShipDupHtml(i){
+  var r=_excelShipRows[i],d=r.duplicateOf;
+  return '<div style="padding:8px 10px;border-bottom:1px solid #f0f0f0;font-size:12.5px;">'+
+    '<div><span style="color:#6b7280;font-weight:700;">이미 처리됨</span> — '+_esc(dedupeName(d.name,d.brand)||r.name||r.code||'')+(r.size?' ('+_esc(r.size)+')':'')+'</div>'+
+    '<div style="font-size:11px;color:#9ca3af;margin-top:2px;word-break:break-all;">주문번호: '+_esc(r.orderNo||'-')+' · 송장번호: '+_esc(r.trackingNo||'-')+'</div>'+
+  '</div>';
+}
+function _excelShipRedHtml(i){
+  var r=_excelShipRows[i];
+  return '<div style="padding:8px 10px;border-bottom:1px solid #fee2e2;font-size:12.5px;">'+
+    '<div><span style="color:#dc2626;font-weight:700;">매칭 안 됨</span> — '+_esc(r.name||r.code||'(상품명 없음)')+(r.size?' · 사이즈 '+_esc(r.size):'')+'</div>'+
+    '<div style="font-size:11px;color:#9ca3af;margin-top:2px;word-break:break-all;">주문번호: '+_esc(r.orderNo||'-')+' · 품번 '+_esc(r.code||'-')+' · 송장번호 '+_esc(r.trackingNo||'-')+'</div>'+
+  '</div>';
+}
+
+function _excelShipReviewBody(feedback){
+  var greenIdx=[],yellowIdx=[],dupIdx=[],redIdx=[];
+  _excelShipRows.forEach(function(r,i){
+    if(r.isDuplicate)dupIdx.push(i);
+    else if(r.matchTier===1)greenIdx.push(i);
+    else if(r.matchTier===2)yellowIdx.push(i);
+    else redIdx.push(i);
+  });
+  var includedGreen=greenIdx.filter(function(i){return !_excelShipRows[i].excluded;});
+  var includedYellow=yellowIdx.filter(function(i){return _excelShipRows[i].approved;});
+  var excludedGreenCnt=greenIdx.length-includedGreen.length;
+  var totalInclude=includedGreen.length+includedYellow.length;
+  var allYellowApproved=yellowIdx.length>0&&yellowIdx.every(function(i){return _excelShipRows[i].approved;});
+
+  var greenHtml=greenIdx.length?greenIdx.map(function(i){return _excelShipRowHtml(i,1);}).join(''):'<div style="text-align:center;color:#9ca3af;padding:10px 0;font-size:13px;">없음</div>';
+  var yellowHtml=yellowIdx.map(function(i){return _excelShipRowHtml(i,2);}).join('');
+  var dupHtml=dupIdx.map(function(i){return _excelShipDupHtml(i);}).join('');
+  var redHtml=redIdx.map(function(i){return _excelShipRedHtml(i);}).join('');
+  var excludedNote=excludedGreenCnt?'<div style="font-size:12px;color:#9ca3af;margin:2px 0 8px;">제외됨 '+excludedGreenCnt+'개 · <a href="#" onclick="event.preventDefault();_excelShipRestore()" style="color:#3b82f6;">되돌리기</a></div>':'';
+  var yellowHeader=yellowIdx.length?'<div style="display:flex;align-items:center;justify-content:space-between;margin:8px 0 2px;">'+
+      '<span style="font-size:12px;font-weight:600;color:#92400e;">⚠️ 확인 필요 (품번+사이즈 매칭, FIFO 1개) — 확인 후 체크해주세요</span>'+
+      '<button type="button" onclick="_excelShipSelectAllYellow('+(!allYellowApproved)+')" style="background:none;border:none;color:#3b82f6;font-size:11px;cursor:pointer;text-decoration:underline;flex-shrink:0;">'+(allYellowApproved?'전체 해제':'전체 선택')+'</button>'+
+    '</div>':'';
+
+  return (feedback?'<div style="margin-bottom:10px;">'+feedback+'</div>':'')+
+    '<div style="font-weight:700;margin-bottom:8px;">인식 '+_excelShipRows.length+'행 · <span style="color:#16a34a;">확실 '+greenIdx.length+'개</span> · <span style="color:#92400e;">확인필요 '+yellowIdx.length+'개</span> · <span style="color:#6b7280;">이미처리됨 '+dupIdx.length+'개</span> · <span style="color:#dc2626;">매칭안됨 '+redIdx.length+'개</span></div>'+
+    '<div style="font-size:12px;font-weight:600;color:#16a34a;margin-bottom:2px;">✅ 확실한 매칭 (보관번호 일치)</div>'+
+    '<div style="max-height:200px;overflow-y:auto;margin-bottom:2px;">'+greenHtml+'</div>'+
+    excludedNote+
+    (yellowIdx.length?yellowHeader+
+      '<div style="max-height:200px;overflow-y:auto;margin-bottom:2px;background:#fffbeb;border-radius:8px;padding:0 8px;">'+yellowHtml+'</div>':'')+
+    (dupIdx.length?'<div style="font-size:12px;font-weight:600;color:#6b7280;margin:8px 0 2px;">🔁 이미 처리됨 (중복) — 자동 건너뜀</div>'+
+      '<div style="max-height:160px;overflow-y:auto;margin-bottom:2px;background:#f8f9fa;border-radius:8px;padding:0 8px;">'+dupHtml+'</div>':'')+
+    (redIdx.length?'<div style="font-size:12px;font-weight:600;color:#dc2626;margin:8px 0 2px;">❌ 매칭 안 됨</div>'+
+      '<div style="max-height:200px;overflow-y:auto;margin-bottom:10px;background:#fef2f2;border-radius:8px;">'+redHtml+'</div>':'<div style="margin-bottom:10px;"></div>')+
+    '<div style="display:flex;gap:8px;">'+
+      '<button type="button" class="sb" style="flex:1;background:#6b7280;" onclick="_excelShipPickerMode=true;_excelShipRows=[];_renderExcelShipModal()">다시 업로드</button>'+
+      (totalInclude?'<button type="button" class="sb" style="flex:2;background:#ef4444;" onclick="confirmExcelShipDispatch()">📦 발송 처리 ('+totalInclude+'개)</button>':'')+
+    '</div>';
+}
+
+// 실제 DB 반영. 이미 발송완료인 항목은 상태·발송완료일은 그대로 두고 보관번호·송장번호만 채운다.
+// 주문완료/보유중 항목은 발송완료로 전환하며 발송완료일(shipped_date)을 엑셀의 처리일시(있으면) 또는 오늘 날짜로 기록한다.
+async function performExcelShipRow(item,storageNo,trackingNo,shipDate){
+  var wasUnshipped=item.status==='주문완료'||item.status==='보유중';
+  var upd={};
+  if(storageNo)upd.storage_no=storageNo;
+  if(trackingNo)upd.tracking_no=trackingNo;
+  if(wasUnshipped){upd.status='발송완료';upd.shipped_date=shipDate;}
+  if(!Object.keys(upd).length)return{error:null,converted:false};
+  var res=await sb.from('items').update(upd).eq('id',item.id);
+  return{error:res.error?res.error.message:null,converted:wasUnshipped};
+}
+
+async function confirmExcelShipDispatch(){
+  if(!sb){alert('설정 탭에서 Supabase 키를 먼저 입력해주세요.');return;}
+  var toApply=_excelShipRows.filter(function(r){
+    return r.matched&&((r.matchTier===1&&!r.excluded)||(r.matchTier===2&&r.approved));
+  });
+  if(!toApply.length){alert('처리할 항목이 없습니다.');return;}
+  var convertCnt=toApply.filter(function(r){return r.matched.status==='주문완료'||r.matched.status==='보유중';}).length;
+  var fillCnt=toApply.length-convertCnt;
+  var leftoverCnt=_excelShipRows.filter(function(r){return !r.isDuplicate;}).length-toApply.length;
+  if(!confirm(toApply.length+'개 항목을 처리할까요?\n(발송완료 전환 '+convertCnt+'개 · 번호만 채움 '+fillCnt+'개)\n보관번호·송장번호가 함께 저장됩니다'))return;
+  document.getElementById('excelShipBody').innerHTML='<div id="_exsProg" style="text-align:center;color:#6b7280;padding:20px 0;">처리 중... (0/'+toApply.length+')</div>';
+  var convertedCnt=0,filledCnt=0,errMsgs=[];
+  for(var i=0;i<toApply.length;i++){
+    var r=toApply[i];
+    var prog=document.getElementById('_exsProg');
+    if(prog)prog.textContent='처리 중... ('+(i+1)+'/'+toApply.length+')';
+    var shipDate=r.processedAt||kstToday();
+    var result=await performExcelShipRow(r.matched,r.orderNo,r.trackingNo,shipDate);
+    if(result.error){errMsgs.push((r.matched.name||r.orderNo)+': '+result.error);continue;}
+    if(result.converted)convertedCnt++;else filledCnt++;
+  }
+  _excelShipRows=[];
+  _excelShipPickerMode=true;
+  document.getElementById('excelShipModal').style.display='none';
+  await load();
+  var msg='✅ 발송완료 전환 '+convertedCnt+'개 · 번호만 채움 '+filledCnt+'개'+(leftoverCnt>0?' · 확인필요/매칭안됨 '+leftoverCnt+'개는 반영 안 됨':'');
   if(errMsgs.length)msg+='\n⚠️ '+errMsgs.length+'건 오류: '+errMsgs.slice(0,3).join(' / ');
   alert(msg);
 }
